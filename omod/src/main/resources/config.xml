@@ -8,7 +8,7 @@
 	<version>${project.parent.version}</version>
 	<package>${MODULE_PACKAGE}</package>
 	<author>Bahmni</author>
-	<description>${project.parent.description}</description>
+	<description>Provides APIs for IPD features</description>
 
 	<require_modules>
 		<require_module>org.openmrs.module.webservices.rest</require_module>
