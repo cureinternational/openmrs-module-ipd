@@ -11,14 +11,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-@Repository
 public class HibernateCareTeamDAO implements CareTeamDAO {
 
     private static final Logger log = LoggerFactory.getLogger(HibernateCareTeamDAO.class);
-    private final SessionFactory sessionFactory;
+    private SessionFactory sessionFactory;
 
-    @Autowired
-    public HibernateCareTeamDAO(SessionFactory sessionFactory) {
+    public void setSessionFactory(SessionFactory sessionFactory) {
         this.sessionFactory = sessionFactory;
     }
 

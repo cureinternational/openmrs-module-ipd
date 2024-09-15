@@ -12,15 +12,13 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
-@Repository
 public class HibernateReferenceDAO implements ReferenceDAO {
 
 	private static final Logger log = LoggerFactory.getLogger(HibernateReferenceDAO.class);
 
-	private final SessionFactory sessionFactory;
+	private SessionFactory sessionFactory;
 
-	@Autowired
-	public HibernateReferenceDAO(SessionFactory sessionFactory) {
+	public void setSessionFactory(SessionFactory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}
 

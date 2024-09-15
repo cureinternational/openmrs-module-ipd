@@ -9,7 +9,7 @@ import org.openmrs.module.bedmanagement.entity.BedPatientAssignment;
 import org.openmrs.module.ipd.BaseIntegrationTest;
 import org.openmrs.module.ipd.api.model.Schedule;
 import org.openmrs.module.ipd.api.service.ScheduleService;
-import org.openmrs.module.ipd.contract.ScheduleMedicationResponse;
+import org.openmrs.module.ipd.web.contract.ScheduleMedicationResponse;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpServletResponse;

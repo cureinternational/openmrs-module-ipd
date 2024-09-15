@@ -12,7 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Repository
+
 public interface SlotDAO {
 
 	Slot getSlot(Integer slotId) throws DAOException;

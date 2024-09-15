@@ -15,17 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Date;
 import java.util.List;
 
-@Service
 @Transactional
 public class WardServiceImpl implements WardService {
 
-    private final WardDAO wardDAO;
+    private WardDAO wardDAO;
 
-    @Autowired
-    public WardServiceImpl(WardDAO wardDAO) {
+    public void setWardDAO(WardDAO wardDAO) {
         this.wardDAO = wardDAO;
     }
-
 
     @Override
     public WardPatientsSummary getIPDWardPatientSummary(String wardUuid, String providerUuid) {

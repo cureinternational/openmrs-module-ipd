@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
-@Service
+
 public interface ReferenceService extends OpenmrsService {
 
 	//	@Authorized({ PrivilegeConstants.EDIT_IPD_SCHEDULES })

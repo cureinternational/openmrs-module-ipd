@@ -25,22 +25,20 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-@Service
 @Transactional
 public class SlotServiceImpl extends BaseOpenmrsService implements SlotService {
-	
+
 	private static final Logger log = LoggerFactory.getLogger(SlotServiceImpl.class);
-	
-	private final SlotDAO slotDAO;
+
+	private SlotDAO slotDAO;
 	private ConceptService conceptService;
 
-	@Autowired
-	public SlotServiceImpl(SlotDAO slotDAO, ConceptService conceptService) {
-
+	public void setSlotDAO(SlotDAO slotDAO) {
 		this.slotDAO = slotDAO;
+	}
+	public void setConceptService(ConceptService conceptService) {
 		this.conceptService = conceptService;
 	}
-
 
 	@Override
 	@Transactional(readOnly = true)
