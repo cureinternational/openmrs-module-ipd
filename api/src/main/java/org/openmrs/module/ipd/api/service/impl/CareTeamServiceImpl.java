@@ -14,14 +14,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Service
 @Transactional
 public class CareTeamServiceImpl extends BaseOpenmrsService implements CareTeamService {
 
     private static final Logger log = LoggerFactory.getLogger(CareTeamServiceImpl.class);
 
-    private CareTeamDAO careTeamDAO;
+    private final CareTeamDAO careTeamDAO;
 
-    public void setCareTeamDAO(CareTeamDAO careTeamDAO) {
+    @Autowired
+    public CareTeamServiceImpl(CareTeamDAO careTeamDAO) {
         this.careTeamDAO = careTeamDAO;
     }
 

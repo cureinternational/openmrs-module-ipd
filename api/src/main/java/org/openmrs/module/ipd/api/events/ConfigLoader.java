@@ -20,8 +20,8 @@ public class ConfigLoader {
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${ipd.events_config.file_path:/etc/bahmni_config/openmrs/apps/ipdDashboard/eventsConfig.json}")
-    private String eventsConfigurationFileLocation;
+    @Value("${config-file.path}")
+    private String routeConfigurationFileLocation;
 
     public List<ConfigDetail> getConfigs() {
         if (configs.isEmpty()) {
@@ -32,10 +32,10 @@ public class ConfigLoader {
 
     private void loadConfiguration() {
         try {
-            File routeConfigurationFile = new FileSystemResource(eventsConfigurationFileLocation).getFile();
+            File routeConfigurationFile = new FileSystemResource(routeConfigurationFileLocation).getFile();
             this.configs = objectMapper.readValue(routeConfigurationFile, new TypeReference<List<ConfigDetail>>() {});
         } catch (IOException exception) {
-            log.error("Failed to load configuration for file : " + eventsConfigurationFileLocation, exception);
+            log.error("Failed to load configuration for file : " + routeConfigurationFileLocation, exception);
         }
     }
 }

@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-
+@Service
 public interface SlotService extends OpenmrsService {
 
 //	@Authorized({ PrivilegeConstants.EDIT_IPD_SLOTS })

@@ -18,13 +18,15 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+@Repository
 public class HibernateWardDAO implements WardDAO {
 
     private static final Logger log = LoggerFactory.getLogger(HibernateWardDAO.class);
 
-    private SessionFactory sessionFactory;
+    private final SessionFactory sessionFactory;
 
-    public void setSessionFactory(SessionFactory sessionFactory) {
+    @Autowired
+    public HibernateWardDAO(SessionFactory sessionFactory) {
         this.sessionFactory = sessionFactory;
     }
 

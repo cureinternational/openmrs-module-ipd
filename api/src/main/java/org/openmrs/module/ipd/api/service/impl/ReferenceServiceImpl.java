@@ -13,14 +13,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
+@Service
 @Transactional
 public class ReferenceServiceImpl extends BaseOpenmrsService implements ReferenceService {
 
 	private static final Logger log = LoggerFactory.getLogger(ReferenceServiceImpl.class);
 
-	private ReferenceDAO referenceDAO;
+	private final ReferenceDAO referenceDAO;
 
-	public void setReferenceDAO(ReferenceDAO referenceDAO) {
+	@Autowired
+	public ReferenceServiceImpl(ReferenceDAO referenceDAO) {
 		this.referenceDAO = referenceDAO;
 	}
 

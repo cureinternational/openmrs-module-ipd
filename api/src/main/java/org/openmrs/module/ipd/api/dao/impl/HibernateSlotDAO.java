@@ -20,16 +20,18 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+@Repository
 public class HibernateSlotDAO implements SlotDAO {
-
+	
 	private static final Logger log = LoggerFactory.getLogger(HibernateSlotDAO.class);
+	
+	private final SessionFactory sessionFactory;
 
-	private SessionFactory sessionFactory;
-
-	public void setSessionFactory(SessionFactory sessionFactory) {
+	@Autowired
+	public HibernateSlotDAO(SessionFactory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}
-
+	
 	@Override
 	public Slot getSlot(Integer slotId) throws DAOException {
 		return sessionFactory.getCurrentSession().get(Slot.class, slotId);

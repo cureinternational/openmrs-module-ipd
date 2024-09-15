@@ -6,10 +6,10 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
-
+@Repository
 public interface ReferenceDAO {
-
+	
 	Optional<Reference> getReferenceByTypeAndTargetUUID(String type, String targetUUID) throws DAOException;
-
+	
 	Reference saveReference(Reference reference) throws DAOException;
 }

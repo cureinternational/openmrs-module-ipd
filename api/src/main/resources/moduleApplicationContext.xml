@@ -8,39 +8,24 @@
        xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
         http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.0.xsd">
 
-    <context:component-scan base-package="org.openmrs.module.ipd.api.events"/>
-    <context:component-scan base-package="org.openmrs.module.ipd.api.translators"/>
+    <context:component-scan base-package="org.openmrs.module.ipd.api"/>
+    <context:annotation-config/>
     <context:property-placeholder location="classpath:application.properties"/>
-
-    <!-- DAO Beans -->
-    <bean id="hibernateCareTeamDAO" class="org.openmrs.module.ipd.api.dao.impl.HibernateCareTeamDAO">
-        <property name="sessionFactory" ref="sessionFactory"/>
-    </bean>
-    <bean id="hibernateReferenceDAO" class="org.openmrs.module.ipd.api.dao.impl.HibernateReferenceDAO">
-        <property name="sessionFactory" ref="sessionFactory"/>
-    </bean>
-    <bean id="hibernateScheduleDAO" class="org.openmrs.module.ipd.api.dao.impl.HibernateScheduleDAO">
-        <property name="sessionFactory" ref="sessionFactory"/>
-    </bean>
-    <bean id="hibernateSlotDAO" class="org.openmrs.module.ipd.api.dao.impl.HibernateSlotDAO">
-        <property name="sessionFactory" ref="sessionFactory"/>
-    </bean>
-    <bean id="hibernateWardDAO" class="org.openmrs.module.ipd.api.dao.impl.HibernateWardDAO">
-        <property name="sessionFactory" ref="sessionFactory"/>
-    </bean>
-
-    <!-- End DAO Beans -->
-
-    <!-- Service Beans -->
-    <bean id="slotServiceImpl" class="org.openmrs.module.ipd.api.service.impl.SlotServiceImpl">
-        <property name="conceptService" ref="conceptService"/>
-        <property name="slotDAO" ref="hibernateSlotDAO"/>
-    </bean>
+    <bean id="hibernateSlotDAO" class="org.openmrs.module.ipd.api.dao.impl.HibernateSlotDAO"/>
+    <bean id="slotServiceImpl" class="org.openmrs.module.ipd.api.service.impl.SlotServiceImpl"/>
     <bean id="slotService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
-        <property name="transactionManager" ref="transactionManager"/>
-        <property name="target" ref="slotServiceImpl"/>
-        <property name="preInterceptors" ref="serviceInterceptors"/>
-        <property name="transactionAttributeSource" ref="transactionAttributeSource"/>
+        <property name="transactionManager">
+            <ref bean="transactionManager"/>
+        </property>
+        <property name="target">
+            <ref bean="slotServiceImpl"/>
+        </property>
+        <property name="preInterceptors">
+            <ref bean="serviceInterceptors"/>
+        </property>
+        <property name="transactionAttributeSource">
+            <ref bean="transactionAttributeSource"/>
+        </property>
     </bean>
     <bean parent="serviceContext">
         <property name="moduleService">
@@ -50,80 +35,5 @@
             </list>
         </property>
     </bean>
-
-    <bean id="wardServiceImpl" class="org.openmrs.module.ipd.api.service.impl.WardServiceImpl">
-        <property name="wardDAO" ref="hibernateWardDAO"/>
-    </bean>
-    <bean id="wardService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
-        <property name="transactionManager" ref="transactionManager"/>
-        <property name="target" ref="wardServiceImpl"/>
-        <property name="preInterceptors" ref="serviceInterceptors"/>
-        <property name="transactionAttributeSource" ref="transactionAttributeSource"/>
-    </bean>
-    <bean parent="serviceContext">
-        <property name="moduleService">
-            <list merge="true">
-                <value>org.openmrs.module.ipd.api.service.WardService</value>
-                <ref bean="wardService"/>
-            </list>
-        </property>
-    </bean>
-
-    <bean id="scheduleServiceImpl" class="org.openmrs.module.ipd.api.service.impl.ScheduleServiceImpl">
-        <property name="scheduleDAO" ref="hibernateScheduleDAO"/>
-    </bean>
-    <bean id="scheduleService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
-        <property name="transactionManager" ref="transactionManager"/>
-        <property name="target" ref="scheduleServiceImpl"/>
-        <property name="preInterceptors" ref="serviceInterceptors"/>
-        <property name="transactionAttributeSource" ref="transactionAttributeSource"/>
-    </bean>
-    <bean parent="serviceContext">
-        <property name="moduleService">
-            <list merge="true">
-                <value>org.openmrs.module.ipd.api.service.ScheduleService</value>
-                <ref bean="scheduleService"/>
-            </list>
-        </property>
-    </bean>
-
-    <bean id="referenceServiceImpl" class="org.openmrs.module.ipd.api.service.impl.ReferenceServiceImpl">
-        <property name="referenceDAO" ref="hibernateReferenceDAO"/>
-    </bean>
-    <bean id="referenceService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
-        <property name="transactionManager" ref="transactionManager"/>
-        <property name="target" ref="referenceServiceImpl"/>
-        <property name="preInterceptors" ref="serviceInterceptors"/>
-        <property name="transactionAttributeSource" ref="transactionAttributeSource"/>
-    </bean>
-    <bean parent="serviceContext">
-        <property name="moduleService">
-            <list merge="true">
-                <value>org.openmrs.module.ipd.api.service.ReferenceService</value>
-                <ref bean="referenceService"/>
-            </list>
-        </property>
-    </bean>
-
-    <bean id="careTeamServiceImpl" class="org.openmrs.module.ipd.api.service.impl.CareTeamServiceImpl">
-        <property name="careTeamDAO" ref="hibernateCareTeamDAO"/>
-    </bean>
-    <bean id="careTeamService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
-        <property name="transactionManager" ref="transactionManager"/>
-        <property name="target" ref="careTeamServiceImpl"/>
-        <property name="preInterceptors" ref="serviceInterceptors"/>
-        <property name="transactionAttributeSource" ref="transactionAttributeSource"/>
-    </bean>
-    <bean parent="serviceContext">
-        <property name="moduleService">
-            <list merge="true">
-                <value>org.openmrs.module.ipd.api.service.CareTeamService</value>
-                <ref bean="careTeamService"/>
-            </list>
-        </property>
-    </bean>
-
-    <bean id="shiftStartTasks" class="org.openmrs.module.ipd.api.scheduler.tasks.ShiftStartTasks"/>
-    <bean id="rollOverNonMedicationTasks" class="org.openmrs.module.ipd.api.scheduler.tasks.RollOverNonMedicationTasks"/>
 
 </beans>

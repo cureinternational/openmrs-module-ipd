@@ -15,12 +15,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class ScheduleServiceImpl extends BaseOpenmrsService implements ScheduleService {
-
+	
 	private static final Logger log = LoggerFactory.getLogger(ScheduleServiceImpl.class);
+	
+	private final ScheduleDAO scheduleDAO;
 
-	private ScheduleDAO scheduleDAO;
-
-	public void setScheduleDAO(ScheduleDAO scheduleDAO) {
+	@Autowired
+	public ScheduleServiceImpl(ScheduleDAO scheduleDAO) {
 		this.scheduleDAO = scheduleDAO;
 	}
 
@@ -29,7 +30,7 @@ public class ScheduleServiceImpl extends BaseOpenmrsService implements ScheduleS
 	public Schedule getSchedule(Integer scheduleId) throws APIException {
 		return scheduleDAO.getSchedule(scheduleId);
 	}
-
+	
 	@Override
 	public Schedule saveSchedule(Schedule schedule) throws APIException {
 		return scheduleDAO.saveSchedule(schedule);

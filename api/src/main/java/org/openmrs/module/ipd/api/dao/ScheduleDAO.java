@@ -6,9 +6,9 @@ import org.openmrs.api.db.DAOException;
 import org.springframework.stereotype.Repository;
 
 
-
+@Repository
 public interface ScheduleDAO {
-
+	
 	Schedule getSchedule(Integer scheduleId) throws DAOException;
 
 	Schedule saveSchedule(Schedule schedule) throws DAOException;

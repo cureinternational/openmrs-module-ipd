@@ -6,7 +6,7 @@ import org.openmrs.module.ipd.api.events.model.IPDEvent;
 import org.openmrs.module.ipd.api.events.model.IPDEventType;
 import org.openmrs.scheduler.tasks.AbstractTask;
 
-
+@Component
 public class RollOverNonMedicationTasks extends AbstractTask implements ApplicationContextAware {
 
     @Override

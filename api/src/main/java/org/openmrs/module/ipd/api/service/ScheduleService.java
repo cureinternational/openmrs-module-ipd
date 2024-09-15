@@ -7,9 +7,9 @@ import org.openmrs.api.OpenmrsService;
 import org.springframework.stereotype.Service;
 
 
-
+@Service
 public interface ScheduleService extends OpenmrsService {
-
+	
 //	@Authorized({ PrivilegeConstants.EDIT_IPD_SCHEDULES })
 	Schedule getSchedule(Integer scheduleId) throws APIException;
 
