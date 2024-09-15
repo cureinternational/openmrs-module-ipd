@@ -123,4 +123,7 @@
         </property>
     </bean>
 
+    <bean id="shiftStartTasks" class="org.openmrs.module.ipd.api.scheduler.tasks.ShiftStartTasks"/>
+    <bean id="rollOverNonMedicationTasks" class="org.openmrs.module.ipd.api.scheduler.tasks.RollOverNonMedicationTasks"/>
+
 </beans>

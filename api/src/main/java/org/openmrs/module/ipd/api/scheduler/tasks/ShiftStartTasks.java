@@ -7,7 +7,8 @@ import org.openmrs.module.ipd.api.events.model.IPDEventType;
 import org.openmrs.scheduler.tasks.AbstractTask;
 
 
-public class ShiftStartTasks extends AbstractTask {
+
+public class ShiftStartTasks extends AbstractTask implements ApplicationContextAware {
 
     @Override
     public void execute() {

@@ -4,6 +4,8 @@ import lombok.*;
 import org.openmrs.module.emrapi.encounter.domain.EncounterTransaction;
 import org.openmrs.module.ipd.web.model.IPDDrugOrder;
 
+import java.util.List;
+
 @Getter
 @Setter
 @Builder
@@ -21,7 +23,7 @@ public class IPDDrugOrderResponse {
                 .provider(ipdDrugOrder.getBahmniDrugOrder().getProvider())
                 .build();
         if (ipdDrugOrder.getDrugOrderSchedule() != null){
-                ipdDrugOrderResponse.setDrugOrderSchedule(DrugOrderScheduleResponse.createFrom(ipdDrugOrder.getDrugOrderSchedule()));
+            ipdDrugOrderResponse.setDrugOrderSchedule(DrugOrderScheduleResponse.createFrom(ipdDrugOrder.getDrugOrderSchedule()));
         }
         return ipdDrugOrderResponse;
     }
