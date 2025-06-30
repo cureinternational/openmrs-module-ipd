@@ -124,6 +124,9 @@ public class SlotServiceImpl extends BaseOpenmrsService implements SlotService {
     @Override
     public void markSlotsAsMissed(List<Slot> scheduledSlots, Map<Order, LocalDateTime> maxTimeForAnOrder) {
         List<Slot> slotsToBeMarkedAsMissed = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
+        Concept asNeededPlaceholderConcept = null;
+        asNeededPlaceholderConcept = this.conceptService.getConceptByName(ServiceType.AS_NEEDED_PLACEHOLDER.conceptName());
 
         final Concept finalPrnConcept = asNeededPlaceholderConcept;
 

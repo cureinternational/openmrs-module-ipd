@@ -11,6 +11,7 @@ import org.openmrs.ConceptName;
 import org.openmrs.Order;
 import org.openmrs.Patient;
 import org.openmrs.Visit;
+import org.openmrs.api.ConceptService;
 import org.openmrs.module.ipd.api.dao.SlotDAO;
 import org.openmrs.module.ipd.api.model.Reference;
 import org.openmrs.module.ipd.api.model.Schedule;
@@ -31,6 +32,9 @@ public class SlotServiceImplTest {
 
     @Mock
     private SlotDAO slotDAO;
+
+    @Mock
+    private ConceptService conceptService;
 
     @Test
     public void shouldInvokeSaveSlotWithGivenSlot() {
@@ -212,10 +216,12 @@ public class SlotServiceImplTest {
 
         Mockito.when(slotDAO.saveSlot(slot1)).thenReturn(slot1);
 
+        Concept prnConcept = new Concept();
+        Mockito.when(conceptService.getConceptByName(Mockito.anyString())).thenReturn(prnConcept);
+        slotService.setConceptService(conceptService);
 
         maxTimeForAnOrder.put(order, futureTime);
         slotService.markSlotsAsMissed(slots, maxTimeForAnOrder);
         Mockito.verify(slotDAO, Mockito.times(1)).saveSlot(slot1);
-
     }
 }
