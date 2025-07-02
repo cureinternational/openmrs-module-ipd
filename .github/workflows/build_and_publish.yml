@@ -1,0 +1,84 @@
+name: Build and Publish package
+on:
+  push:
+    branches: [ Bahmni-IPD-master ]
+  workflow_dispatch:
+
+jobs:
+  Trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Trivy Scan
+        run: |
+          wget -q https://raw.githubusercontent.com/Bahmni/bahmni-infra-utils/main/trivy_scan.sh && chmod +x trivy_scan.sh
+          ./trivy_scan.sh
+          rm trivy_scan.sh
+  build-publish-package:
+    name: Build and Publish package
+    runs-on: ubuntu-latest
+    needs: Trivy
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('''**/pom.xml''') }}
+          restore-keys: ${{ runner.os }}-m2
+      - name: Install Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '2.7'
+          bundler-cache: true
+      - name: Install compass
+        run: |
+          sudo gem install compass -v 1.0.3
+      - name: Build and deploy with Maven
+        run: ./mvnw --no-transfer-progress clean -U package -DskipTests
+        
+      - name: Delete Existing Release and Tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          release_name="Release-v1.2.0"
+          tag_name="v1.2.0"
+
+          # Fetch all releases and filter by release name to get the release ID
+          release_id=$(curl -s -X GET -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${{ github.repository }}/releases" | jq -r --arg release_name "$release_name" '.[] | select(.name == $release_name) | .id')
+
+          if [ ! -z "$release_id" ] && [ "$release_id" != "null" ]; then
+            # Delete the release using the release ID
+            curl -s -X DELETE -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${{ github.repository }}/releases/$release_id"
+            echo "Deleted release $release_name"
+          else
+            echo "No release found for $release_name to delete."
+          fi
+
+          # Attempt to delete the tag on the remote repository
+          git push --delete origin $tag_name || echo "Tag $tag_name not found on remote."
+      - name: Create GitHub release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+            tag_name: v1.2.0
+            release_name: Release-v1.2.0
+            draft: false
+            prerelease: false
+
+      - name: Upload SNAPSHOT.omod to release
+        uses: actions/upload-release-asset@v1
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+            upload_url: ${{ steps.create_release.outputs.upload_url }}
+            asset_path: omod/target/bahmni-ipd-1.2.0-SNAPSHOT.omod
+            asset_name: bahmni-ipd-1.2.0-SNAPSHOT.omod
+            asset_content_type: application/octet-stream
