@@ -135,7 +135,7 @@ public class SlotServiceImpl extends BaseOpenmrsService implements SlotService {
                                     slot.getServiceType() != null &&
                                     slot.getServiceType().equals(finalPrnConcept);
 
-                LocalDateTime slotEndDateTime = slot.getEndDateTime();
+                LocalDateTime slotEndDateTime = isPrnTask ? slot.getOrder().getAutoExpireDate().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime() : slot.getEndDateTime();
 
                 boolean prnShouldBeSkipped = isPrnTask &&
                                              slotEndDateTime != null &&
