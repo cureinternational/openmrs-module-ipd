@@ -12,6 +12,7 @@ import org.openmrs.module.ipd.api.model.Reference;
 import org.openmrs.module.ipd.api.model.ServiceType;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.api.service.SlotService;
+import org.openmrs.module.ipd.api.util.DateTimeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -123,10 +124,28 @@ public class SlotServiceImpl extends BaseOpenmrsService implements SlotService {
     @Override
     public void markSlotsAsMissed(List<Slot> scheduledSlots, Map<Order, LocalDateTime> maxTimeForAnOrder) {
         List<Slot> slotsToBeMarkedAsMissed = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
+        Concept asNeededPlaceholderConcept = null;
+        asNeededPlaceholderConcept = this.conceptService.getConceptByName(ServiceType.AS_NEEDED_PLACEHOLDER.conceptName());
 
-        scheduledSlots.stream().forEach(slot -> {
-            if (slot.getStartDateTime().compareTo(maxTimeForAnOrder.get(slot.getOrder())) < 0)
-                slotsToBeMarkedAsMissed.add(slot);
+        final Concept finalPrnConcept = asNeededPlaceholderConcept;
+
+        scheduledSlots.forEach(slot -> {
+            if (slot.getStartDateTime().compareTo(maxTimeForAnOrder.get(slot.getOrder())) < 0) {
+                boolean isPrnTask = finalPrnConcept != null &&
+                                    slot.getServiceType() != null &&
+                                    slot.getServiceType().equals(finalPrnConcept);
+
+                LocalDateTime slotEndDateTime = isPrnTask ? DateTimeUtil.convertDateToLocalDateTime(slot.getOrder().getAutoExpireDate()) : slot.getEndDateTime();
+
+                boolean prnShouldBeSkipped = isPrnTask &&
+                                             slotEndDateTime != null &&
+                                             slotEndDateTime.isAfter(now);
+
+                if (!prnShouldBeSkipped) {
+                    slotsToBeMarkedAsMissed.add(slot);
+                }
+            }
         });
 
         slotsToBeMarkedAsMissed.forEach(slot -> {
