@@ -33,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 
@@ -144,7 +145,7 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
             }
         }
         note.setAmendedText(amendmentRequest.getAmendedText());
-        note.setRecordedTime(amendmentRequest.getAmendedDateTimeAsLocaltime());
+        note.setRecordedTime(new Date());
         note.setAmendedReason(amendmentRequest.getAmendedReason());
         note.setApprovalStatus(ApprovalStatus.PENDING);
 
