@@ -142,10 +142,11 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
             Provider provider = Context.getProviderService().getProviderByUuid(amendmentRequest.getAmendedByUuid());
             if (provider != null) {
                 note.setAuthor(provider);
+                note.setAmendedBy(provider);
             }
         }
         note.setAmendedText(amendmentRequest.getAmendedText());
-        note.setRecordedTime(new Date());
+        note.setAmendedTime(new Date());
         note.setAmendedReason(amendmentRequest.getAmendedReason());
         note.setApprovalStatus(ApprovalStatus.PENDING);
 
