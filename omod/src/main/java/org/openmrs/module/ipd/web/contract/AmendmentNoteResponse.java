@@ -24,6 +24,8 @@ public class AmendmentNoteResponse {
     private Object author;
     private Date recordedTime;
     private String amendedReason;
+    private Date amendedTime;
+    private Object amendedBy;
     private Object approvedBy;
     private String approvalStatus;
     private Date approvedDateTime;
@@ -49,6 +51,11 @@ public class AmendmentNoteResponse {
             approvalStatusName = openmrsObject.getApprovalStatus().name();
         }
 
+        Object amendedBy = null;
+        if (openmrsObject.getAmendedBy() != null) {
+            amendedBy = ConversionUtil.convertToRepresentation(openmrsObject.getAmendedBy(), Representation.REF);
+        }
+
         return AmendmentNoteResponse.builder()
                 .uuid(openmrsObject.getUuid())
                 .text(openmrsObject.getText())
@@ -56,6 +63,8 @@ public class AmendmentNoteResponse {
                 .author(author)
                 .recordedTime(openmrsObject.getRecordedTime())
                 .amendedReason(openmrsObject.getAmendedReason())
+                .amendedTime(openmrsObject.getAmendedTime())
+                .amendedBy(amendedBy)
                 .approvedBy(approvedBy)
                 .approvalStatus(approvalStatusName)
                 .approvedDateTime(openmrsObject.getApprovedDateTime())
