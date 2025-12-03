@@ -14,5 +14,4 @@ import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 public class NoteAmendmentRequest {
     private String amendedText;
     private String amendedReason;
-    private String amendedByUuid;
 }

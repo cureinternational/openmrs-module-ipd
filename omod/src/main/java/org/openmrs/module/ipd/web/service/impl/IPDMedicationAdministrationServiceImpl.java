@@ -138,17 +138,16 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
             NoteAmendmentRequest amendmentRequest) {
 
         MedicationAdministrationNote note = fhirMedicationAdministrationNoteDao.get(noteUuid);
-        if (note == null) {
+        if (isNull(note)) {
             throw new RuntimeException("Note not found with UUID: " + noteUuid);
         }
-
-        if (amendmentRequest.getAmendedByUuid() != null) {
-            Provider provider = Context.getProviderService().getProviderByUuid(amendmentRequest.getAmendedByUuid());
-            if (provider != null) {
-                note.setAuthor(provider);
-                note.setAmendedBy(provider);
-            }
+        String userUuid = Context.getUserContext().getAuthenticatedUser().getUuid();
+        Provider provider = Context.getProviderService().getProviderByUuid(userUuid);
+        if (provider != null) {
+            note.setAuthor(provider);
+            note.setAmendedBy(provider);
         }
+
         note.setAmendedText(amendmentRequest.getAmendedText());
         note.setAmendedTime(new Date());
         note.setAmendedReason(amendmentRequest.getAmendedReason());
