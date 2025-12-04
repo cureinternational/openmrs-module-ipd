@@ -143,9 +143,11 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
         }
         String userUuid = Context.getUserContext().getAuthenticatedUser().getUuid();
         Provider provider = Context.getProviderService().getProviderByUuid(userUuid);
-        if (provider != null) {
-            note.setAuthor(provider);
+
+        if (nonNull(provider)) {
             note.setAmendedBy(provider);
+        } else {
+            throw new RuntimeException("Provider not found with UUID: " + userUuid);
         }
 
         note.setAmendedText(amendmentRequest.getAmendedText());
