@@ -162,31 +162,32 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
     public MedicationAdministrationNote acknowledgeAmendment(
             String noteUuid,
             NoteAcknowledgeRequest acknowledgeRequest) {
-        MedicationAdministrationNote amendmentNote = fhirMedicationAdministrationNoteDao.get(noteUuid);
 
+        MedicationAdministrationNote amendmentNote = fhirMedicationAdministrationNoteDao.get(noteUuid);
         if (isNull(amendmentNote)) {
             throw new RuntimeException("Amendment note not found with UUID: " + noteUuid);
         }
+
         if (isNull(amendmentNote.getAmendedReason())) {
             throw new RuntimeException("Note is not an amendment note");
         }
+
         if (nonNull(amendmentNote.getApprovalStatus()) && amendmentNote.getApprovalStatus() != ApprovalStatus.PENDING) {
             throw new RuntimeException("Amendment note has already been acknowledged");
         }
+
         if (isNull(acknowledgeRequest.getApprovalStatus()) || acknowledgeRequest.getApprovalStatus().trim().isEmpty()) {
             throw new RuntimeException("Approval status is required when acknowledging an amendment");
         }
 
-        String userUuid = Context.getUserContext().getAuthenticatedUser().getUuid();
-
-        Provider provider = Context.getProviderService().getProviderByUuid(userUuid);
-
-        if (nonNull(provider)) {
-            amendmentNote.setApprovedBy(provider);
-        } else {
-            throw new RuntimeException("Provider not found with UUID: " + userUuid);
+        if (nonNull(acknowledgeRequest.getApprovedByUuid())) {
+            Provider provider = Context.getProviderService().getProviderByUuid(acknowledgeRequest.getApprovedByUuid());
+            if (nonNull(provider)) {
+                amendmentNote.setApprovedBy(provider);
+            } else {
+                throw new RuntimeException("Provider not found with UUID: " + acknowledgeRequest.getApprovedByUuid());
+            }
         }
-
         amendmentNote.setApprovalStatus(ApprovalStatus.valueOf(acknowledgeRequest.getApprovalStatus().toUpperCase()));
         amendmentNote.setApprovedDateTime(acknowledgeRequest.getApprovedDateTimeAsLocaltime());
         amendmentNote.setApprovalNotes(acknowledgeRequest.getApprovalNotes());

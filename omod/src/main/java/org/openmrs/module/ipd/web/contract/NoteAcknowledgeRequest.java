@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class NoteAcknowledgeRequest {
     private String approvalStatus;  // PENDING, APPROVED, REJECTED
+    private String approvedByUuid;
     private Long approvedDateTime;
     private String approvalNotes;
 
