@@ -141,13 +141,12 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
         if (isNull(note)) {
             throw new RuntimeException("Note not found with UUID: " + noteUuid);
         }
-        String userUuid = Context.getUserContext().getAuthenticatedUser().getUuid();
-        Provider provider = Context.getProviderService().getProviderByUuid(userUuid);
+        Provider provider = Context.getProviderService().getProviderByUuid(amendmentRequest.getAmendedByUuid());
 
         if (nonNull(provider)) {
             note.setAmendedBy(provider);
         } else {
-            throw new RuntimeException("Provider not found with UUID: " + userUuid);
+            throw new RuntimeException("Provider not found with UUID: " + amendmentRequest.getAmendedByUuid());
         }
 
         note.setAmendedText(amendmentRequest.getAmendedText());
@@ -180,14 +179,14 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
             throw new RuntimeException("Approval status is required when acknowledging an amendment");
         }
 
-        if (nonNull(acknowledgeRequest.getApprovedByUuid())) {
-            Provider provider = Context.getProviderService().getProviderByUuid(acknowledgeRequest.getApprovedByUuid());
-            if (nonNull(provider)) {
-                amendmentNote.setApprovedBy(provider);
-            } else {
-                throw new RuntimeException("Provider not found with UUID: " + acknowledgeRequest.getApprovedByUuid());
-            }
+
+        Provider provider = Context.getProviderService().getProviderByUuid(acknowledgeRequest.getApprovedByUuid());
+        if (nonNull(provider)) {
+            amendmentNote.setApprovedBy(provider);
+        } else {
+            throw new RuntimeException("Provider not found with UUID: " + acknowledgeRequest.getApprovedByUuid());
         }
+
         amendmentNote.setApprovalStatus(ApprovalStatus.valueOf(acknowledgeRequest.getApprovalStatus().toUpperCase()));
         amendmentNote.setApprovedDateTime(acknowledgeRequest.getApprovedDateTimeAsLocaltime());
         amendmentNote.setApprovalNotes(acknowledgeRequest.getApprovalNotes());
