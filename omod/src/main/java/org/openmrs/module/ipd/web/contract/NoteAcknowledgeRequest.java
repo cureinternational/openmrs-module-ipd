@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 
-import javax.validation.constraints.NotNull;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
@@ -17,7 +16,6 @@ import java.util.concurrent.TimeUnit;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class NoteAcknowledgeRequest {
     private String approvalStatus;  // PENDING, APPROVED, REJECTED
-    @NotNull
     private String approvedByUuid;
     private Long approvedDateTime;
     private String approvalNotes;

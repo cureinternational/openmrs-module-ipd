@@ -6,8 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 
-import javax.validation.constraints.NotNull;
-
 @Getter
 @Builder
 @NoArgsConstructor
@@ -16,6 +14,5 @@ import javax.validation.constraints.NotNull;
 public class NoteAmendmentRequest {
     private String amendedText;
     private String amendedReason;
-    @NotNull
     private String amendedByUuid;
 }

@@ -8,6 +8,7 @@ import org.openmrs.module.ipd.web.contract.*;
 import org.openmrs.module.ipd.web.factory.MedicationAdministrationFactory;
 import org.openmrs.module.ipd.web.service.IPDMedicationAdministrationService;
 import org.openmrs.module.ipd.web.util.PrivilegeConstants;
+import org.openmrs.module.ipd.web.validators.NoteAcknowledgeRequestValidator;
 import org.openmrs.module.ipd.web.validators.NoteAmendmentRequestValidator;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.module.webservices.rest.web.RestUtil;
@@ -35,14 +36,16 @@ public class IPDMedicationAdministrationController extends BaseRestController {
     private final IPDMedicationAdministrationService ipdMedicationAdministrationService;
     private final MedicationAdministrationFactory medicationAdministrationFactory;
     private final NoteAmendmentRequestValidator noteAmendmentRequestValidator;
+    private final NoteAcknowledgeRequestValidator noteAcknowledgeRequestValidator;
     private static final Logger log = LoggerFactory.getLogger(IPDMedicationAdministrationController.class);
 
     @Autowired
     public IPDMedicationAdministrationController(IPDMedicationAdministrationService ipdMedicationAdministrationService,
-                                                 MedicationAdministrationFactory medicationAdministrationFactory, NoteAmendmentRequestValidator noteAmendmentRequestValidator) {
+                                                 MedicationAdministrationFactory medicationAdministrationFactory, NoteAmendmentRequestValidator noteAmendmentRequestValidator, NoteAcknowledgeRequestValidator noteAcknowledgeRequestValidator) {
         this.ipdMedicationAdministrationService = ipdMedicationAdministrationService;
         this.medicationAdministrationFactory = medicationAdministrationFactory;
         this.noteAmendmentRequestValidator = noteAmendmentRequestValidator;
+        this.noteAcknowledgeRequestValidator = noteAcknowledgeRequestValidator;
     }
 
     @RequestMapping(value = "/scheduledMedicationAdministrations", method = RequestMethod.POST)
@@ -126,8 +129,15 @@ public class IPDMedicationAdministrationController extends BaseRestController {
             if (!Context.getUserContext().hasPrivilege(PrivilegeConstants.APPROVE_AMEND_NOTE)) {
                 return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege " + PrivilegeConstants.APPROVE_AMEND_NOTE), FORBIDDEN);
             }
+            Errors acknowledgeErrors = new BeanPropertyBindingResult(acknowledgeRequest, "noteAcknowledgeRequest");
+            noteAcknowledgeRequestValidator.validate(acknowledgeRequest, acknowledgeErrors);
+            if (!acknowledgeErrors.getAllErrors().isEmpty()) {
+                throw new RuntimeException(acknowledgeErrors.getAllErrors().get(0).getCode());
+            }
+
             MedicationAdministrationNote updatedNote =
                 ipdMedicationAdministrationService.acknowledgeAmendment(noteUuid, acknowledgeRequest);
+
             return new ResponseEntity<>(AmendmentNoteResponse.createFrom(updatedNote), OK);
         } catch (Exception e) {
             log.error("Runtime error while trying to acknowledge amendment", e);
