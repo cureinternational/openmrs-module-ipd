@@ -3,17 +3,12 @@ package org.openmrs.module.ipd.web.controller;
 import lombok.extern.slf4j.Slf4j;
 import org.hl7.fhir.r4.model.MedicationAdministration;
 import org.openmrs.api.context.Context;
-import org.openmrs.module.fhir2.apiext.dao.FhirMedicationAdministrationDao;
 import org.openmrs.module.ipd.api.model.MedicationAdministrationNote;
-import org.openmrs.module.ipd.api.service.SlotService;
-import org.openmrs.module.ipd.web.contract.AmendmentNoteResponse;
-import org.openmrs.module.ipd.web.contract.MedicationAdministrationRequest;
-import org.openmrs.module.ipd.web.contract.MedicationAdministrationResponse;
-import org.openmrs.module.ipd.web.contract.NoteAmendmentRequest;
-import org.openmrs.module.ipd.web.contract.NoteAcknowledgeRequest;
+import org.openmrs.module.ipd.web.contract.*;
 import org.openmrs.module.ipd.web.factory.MedicationAdministrationFactory;
 import org.openmrs.module.ipd.web.service.IPDMedicationAdministrationService;
 import org.openmrs.module.ipd.web.util.PrivilegeConstants;
+import org.openmrs.module.ipd.web.validators.NoteAmendmentRequestValidator;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.module.webservices.rest.web.RestUtil;
 import org.openmrs.module.webservices.rest.web.v1_0.controller.BaseRestController;
@@ -22,8 +17,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.Errors;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,15 +34,15 @@ public class IPDMedicationAdministrationController extends BaseRestController {
 
     private final IPDMedicationAdministrationService ipdMedicationAdministrationService;
     private final MedicationAdministrationFactory medicationAdministrationFactory;
+    private final NoteAmendmentRequestValidator noteAmendmentRequestValidator;
     private static final Logger log = LoggerFactory.getLogger(IPDMedicationAdministrationController.class);
 
     @Autowired
     public IPDMedicationAdministrationController(IPDMedicationAdministrationService ipdMedicationAdministrationService,
-                                                 SlotService slotService,
-                                                 FhirMedicationAdministrationDao medicationAdministrationDao,
-                                                 MedicationAdministrationFactory medicationAdministrationFactory) {
+                                                 MedicationAdministrationFactory medicationAdministrationFactory, NoteAmendmentRequestValidator noteAmendmentRequestValidator) {
         this.ipdMedicationAdministrationService = ipdMedicationAdministrationService;
         this.medicationAdministrationFactory = medicationAdministrationFactory;
+        this.noteAmendmentRequestValidator = noteAmendmentRequestValidator;
     }
 
     @RequestMapping(value = "/scheduledMedicationAdministrations", method = RequestMethod.POST)
@@ -100,10 +98,15 @@ public class IPDMedicationAdministrationController extends BaseRestController {
     @ResponseBody
     public ResponseEntity<Object> amendNote(
             @PathVariable("noteUuid") String noteUuid,
-            @RequestBody NoteAmendmentRequest amendmentRequest) {
+            @Valid @RequestBody NoteAmendmentRequest amendmentRequest) {
         try {
             if (!Context.getUserContext().hasPrivilege(PrivilegeConstants.EDIT_MEDICATION_ADMINISTRATION)) {
                 return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege " + PrivilegeConstants.EDIT_MEDICATION_ADMINISTRATION), FORBIDDEN);
+            }
+            Errors amendmentErrors = new BeanPropertyBindingResult(amendmentRequest, "noteAmendmentRequest");
+            noteAmendmentRequestValidator.validate(amendmentRequest, amendmentErrors);
+            if (!amendmentErrors.getAllErrors().isEmpty()) {
+                throw new RuntimeException(amendmentErrors.getAllErrors().get(0).getCode());
             }
             MedicationAdministrationNote amendmentNote =
                 ipdMedicationAdministrationService.amendNote(noteUuid, amendmentRequest);
@@ -118,7 +121,7 @@ public class IPDMedicationAdministrationController extends BaseRestController {
     @ResponseBody
     public ResponseEntity<Object> acknowledgeAmendment(
             @PathVariable("noteUuid") String noteUuid,
-            @RequestBody NoteAcknowledgeRequest acknowledgeRequest) {
+            @Valid @RequestBody NoteAcknowledgeRequest acknowledgeRequest) {
         try {
             if (!Context.getUserContext().hasPrivilege(PrivilegeConstants.APPROVE_AMEND_NOTE)) {
                 return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege " + PrivilegeConstants.APPROVE_AMEND_NOTE), FORBIDDEN);
