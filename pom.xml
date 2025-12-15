@@ -51,7 +51,7 @@
 		<fhir2ExtensionVersion>1.4.0-SNAPSHOT</fhir2ExtensionVersion>
 		<bahmniVersion>1.2.0</bahmniVersion>
 		<emrapi-omod.version>1.36.0</emrapi-omod.version>
-		<medicationAdminstrationVersion>1.0.0</medicationAdminstrationVersion>
+		<medicationAdminstrationVersion>2.0.0.ipd-SNAPSHOT</medicationAdminstrationVersion>
 	</properties>
 
 	<build>
@@ -376,6 +376,11 @@
 			<snapshots>
 				<enabled>true</enabled>
 			</snapshots>
+		</repository>
+		<repository>
+			<id>github</id>
+			<name>GitHub Packages</name>
+			<url>https://maven.pkg.github.com/cureinternational/openmrs-module-medicationadministration</url>
 		</repository>
 	</repositories>
 
