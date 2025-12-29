@@ -43,7 +43,7 @@ jobs:
           </settings>
           EOF
       - name: Build and deploy with Maven
-        run: ./mvnw --no-transfer-progress clean -U package -DskipTests
+        run: ./mvnw --no-transfer-progress clean -U deploy -DskipTests
         
       - name: Delete Existing Release and Tag
         env:
