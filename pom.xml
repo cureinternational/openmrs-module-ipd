@@ -4,7 +4,7 @@
 
 	<groupId>org.bahmni.module</groupId>
 	<artifactId>bahmni-ipd</artifactId>
-	<version>1.2.0-SNAPSHOT</version>
+	<version>1.2.0.ipd-SNAPSHOT</version>
 	<packaging>pom</packaging>
 	<name>Bahmni IPD</name>
 	<description>Bahmni IPD module contains all backend APIs for IPD</description>
@@ -135,25 +135,6 @@
 						<includes>
 							<include>**/*Test.java</include>
 						</includes>
-					</configuration>
-				</plugin>
-				<plugin>
-					<groupId>org.sonatype.plugins</groupId>
-					<artifactId>nexus-staging-maven-plugin</artifactId>
-					<version>1.5.1</version>
-					<extensions>true</extensions>
-					<executions>
-						<execution>
-							<id>default-deploy</id>
-							<phase>deploy</phase>
-							<goals>
-								<goal>deploy</goal>
-							</goals>
-						</execution>
-					</executions>
-					<configuration>
-						<serverId>nexus-sonatype</serverId>
-						<nexusUrl>https://oss.sonatype.org</nexusUrl>
 					</configuration>
 				</plugin>
 			</plugins>
