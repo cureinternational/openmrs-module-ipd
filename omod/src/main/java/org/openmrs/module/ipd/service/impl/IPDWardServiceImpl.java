@@ -4,7 +4,7 @@ import org.openmrs.module.ipd.api.model.AdmittedPatient;
 import org.openmrs.module.ipd.api.model.IPDPatientDetails;
 import org.openmrs.module.ipd.api.model.WardPatientsSummary;
 import org.openmrs.module.ipd.api.service.WardService;
-import org.openmrs.module.ipd.service.IPDWardService;
+import org.openmrs.module.ipd.web.service.IPDWardService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
