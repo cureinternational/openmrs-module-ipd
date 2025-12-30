@@ -9,7 +9,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 
-public class RollOverNonMedicationTasks extends AbstractTask{
+@Component
+public class RollOverNonMedicationTasks extends AbstractTask implements ApplicationContextAware {
 
     @Override
     public void execute() {
