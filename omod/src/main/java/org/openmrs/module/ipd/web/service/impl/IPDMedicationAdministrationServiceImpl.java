@@ -3,15 +3,11 @@ package org.openmrs.module.ipd.web.service.impl;
 import org.apache.commons.lang.StringUtils;
 import org.openmrs.Patient;
 import org.openmrs.Visit;
-import org.openmrs.Provider;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.fhir2.apiext.FhirMedicationAdministrationService;
 import org.openmrs.module.fhir2.apiext.dao.FhirMedicationAdministrationDao;
-import org.openmrs.module.fhir2.apiext.dao.FhirMedicationAdministrationNoteDao;
 import org.openmrs.module.fhir2.apiext.translators.MedicationAdministrationTranslator;
-import org.openmrs.module.ipd.api.model.ApprovalStatus;
 import org.openmrs.module.ipd.api.model.MedicationAdministration;
-import org.openmrs.module.ipd.api.model.MedicationAdministrationNote;
 import org.openmrs.module.ipd.api.model.Schedule;
 import org.openmrs.module.ipd.api.model.ServiceType;
 import org.openmrs.module.ipd.api.model.Slot;
@@ -20,8 +16,6 @@ import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.api.translators.MedicationAdministrationToSlotStatusTranslator;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationRequest;
-import org.openmrs.module.ipd.web.contract.NoteAmendmentRequest;
-import org.openmrs.module.ipd.web.contract.NoteAcknowledgeRequest;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.MedicationAdministrationFactory;
 import org.openmrs.module.ipd.web.factory.ScheduleFactory;
@@ -33,12 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Objects;
-
-import static java.util.Objects.isNull;
-import static java.util.Objects.nonNull;
 
 
 @Transactional
@@ -55,7 +44,6 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
     private FhirMedicationAdministrationDao fhirMedicationAdministrationDao;
     private MedicationAdministrationToSlotStatusTranslator medicationAdministrationToSlotStatusTranslator;
     private ScheduleFactory scheduleFactory;
-    private FhirMedicationAdministrationNoteDao fhirMedicationAdministrationNoteDao;
 
     @Autowired
     public IPDMedicationAdministrationServiceImpl(FhirMedicationAdministrationService fhirMedicationAdministrationService,
@@ -64,8 +52,7 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
                                                   SlotFactory slotFactory, SlotService slotService, ScheduleService scheduleService,
                                                   FhirMedicationAdministrationDao fhirMedicationAdministrationDao,
                                                   MedicationAdministrationToSlotStatusTranslator medicationAdministrationToSlotStatusTranslator,
-                                                  ScheduleFactory scheduleFactory,
-                                                  FhirMedicationAdministrationNoteDao fhirMedicationAdministrationNoteDao) {
+                                                  ScheduleFactory scheduleFactory) {
         this.fhirMedicationAdministrationService = fhirMedicationAdministrationService;
         this.medicationAdministrationTranslator = medicationAdministrationTranslator;
         this.medicationAdministrationFactory = medicationAdministrationFactory;
@@ -75,7 +62,6 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
         this.fhirMedicationAdministrationDao = fhirMedicationAdministrationDao;
         this.medicationAdministrationToSlotStatusTranslator=medicationAdministrationToSlotStatusTranslator;
         this.scheduleFactory = scheduleFactory;
-        this.fhirMedicationAdministrationNoteDao = fhirMedicationAdministrationNoteDao;
     }
 
     private org.hl7.fhir.r4.model.MedicationAdministration createMedicationAdministration(MedicationAdministrationRequest medicationAdministrationRequest) {
@@ -130,68 +116,6 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
                         openmrsMedicationAdministration, Slot.SlotStatus.COMPLETED, serviceType,"")
                 .forEach(slotService::saveSlot);
         return medicationAdministration;
-    }
-
-    @Override
-    public MedicationAdministrationNote amendNote(
-            String noteUuid,
-            NoteAmendmentRequest amendmentRequest) {
-
-        MedicationAdministrationNote note = fhirMedicationAdministrationNoteDao.get(noteUuid);
-        if (isNull(note)) {
-            throw new RuntimeException("Note not found with UUID: " + noteUuid);
-        }
-        Provider provider = Context.getProviderService().getProviderByUuid(amendmentRequest.getAmendedByUuid());
-
-        if (nonNull(provider)) {
-            note.setAmendedBy(provider);
-        } else {
-            throw new RuntimeException("Provider not found with UUID: " + amendmentRequest.getAmendedByUuid());
-        }
-
-        note.setAmendedText(amendmentRequest.getAmendedText());
-        note.setAmendedTime(new Date());
-        note.setAmendedReason(amendmentRequest.getAmendedReason());
-        note.setApprovalStatus(ApprovalStatus.PENDING);
-
-        return fhirMedicationAdministrationNoteDao.createOrUpdate(note);
-    }
-
-    @Override
-    public MedicationAdministrationNote acknowledgeAmendment(
-            String noteUuid,
-            NoteAcknowledgeRequest acknowledgeRequest) {
-
-        MedicationAdministrationNote amendmentNote = fhirMedicationAdministrationNoteDao.get(noteUuid);
-        if (isNull(amendmentNote)) {
-            throw new RuntimeException("Amendment note not found with UUID: " + noteUuid);
-        }
-
-        if (isNull(amendmentNote.getAmendedReason())) {
-            throw new RuntimeException("Note is not an amendment note");
-        }
-
-        if (nonNull(amendmentNote.getApprovalStatus()) && amendmentNote.getApprovalStatus() != ApprovalStatus.PENDING) {
-            throw new RuntimeException("Amendment note has already been acknowledged");
-        }
-
-        if (isNull(acknowledgeRequest.getApprovalStatus()) || acknowledgeRequest.getApprovalStatus().trim().isEmpty()) {
-            throw new RuntimeException("Approval status is required when acknowledging an amendment");
-        }
-
-
-        Provider provider = Context.getProviderService().getProviderByUuid(acknowledgeRequest.getApprovedByUuid());
-        if (nonNull(provider)) {
-            amendmentNote.setApprovedBy(provider);
-        } else {
-            throw new RuntimeException("Provider not found with UUID: " + acknowledgeRequest.getApprovedByUuid());
-        }
-
-        amendmentNote.setApprovalStatus(ApprovalStatus.valueOf(acknowledgeRequest.getApprovalStatus().toUpperCase()));
-        amendmentNote.setApprovedDateTime(acknowledgeRequest.getApprovedDateTimeAsLocaltime());
-        amendmentNote.setApprovalNotes(acknowledgeRequest.getApprovalNotes());
-
-        return fhirMedicationAdministrationNoteDao.createOrUpdate(amendmentNote);
     }
 
 }
