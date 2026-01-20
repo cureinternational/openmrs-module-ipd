@@ -4,13 +4,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.hl7.fhir.r4.model.MedicationAdministration;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.fhir2.apiext.dao.FhirMedicationAdministrationDao;
-import org.openmrs.module.ipd.api.model.MedicationAdministrationNote;
 import org.openmrs.module.ipd.api.service.SlotService;
-import org.openmrs.module.ipd.web.contract.AmendmentNoteResponse;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationRequest;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationResponse;
-import org.openmrs.module.ipd.web.contract.NoteAmendmentRequest;
-import org.openmrs.module.ipd.web.contract.NoteAcknowledgeRequest;
 import org.openmrs.module.ipd.web.factory.MedicationAdministrationFactory;
 import org.openmrs.module.ipd.web.service.IPDMedicationAdministrationService;
 import org.openmrs.module.ipd.web.util.PrivilegeConstants;
@@ -92,42 +88,6 @@ public class IPDMedicationAdministrationController extends BaseRestController {
             return new ResponseEntity(medicationAdministrationFactory.mapMedicationAdministrationToResponse(medicationAdministration),OK);
         } catch (Exception e) {
             log.error("Runtime error while trying to update new medicationAdministration", e);
-            return new ResponseEntity<>(RestUtil.wrapErrorResponse(e, e.getMessage()), BAD_REQUEST);
-        }
-    }
-
-    @RequestMapping(value = "/amendNotes/{noteUuid}", method = RequestMethod.POST)
-    @ResponseBody
-    public ResponseEntity<Object> amendNote(
-            @PathVariable("noteUuid") String noteUuid,
-            @RequestBody NoteAmendmentRequest amendmentRequest) {
-        try {
-            if (!Context.getUserContext().hasPrivilege(PrivilegeConstants.EDIT_MEDICATION_ADMINISTRATION)) {
-                return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege " + PrivilegeConstants.EDIT_MEDICATION_ADMINISTRATION), FORBIDDEN);
-            }
-            MedicationAdministrationNote amendmentNote =
-                ipdMedicationAdministrationService.amendNote(noteUuid, amendmentRequest);
-            return new ResponseEntity<>(AmendmentNoteResponse.createFrom(amendmentNote), OK);
-        } catch (Exception e) {
-            log.error("Runtime error while trying to amend note", e);
-            return new ResponseEntity<>(RestUtil.wrapErrorResponse(e, e.getMessage()), BAD_REQUEST);
-        }
-    }
-
-    @RequestMapping(value = "/amendNotes/{noteUuid}/acknowledge", method = RequestMethod.POST)
-    @ResponseBody
-    public ResponseEntity<Object> acknowledgeAmendment(
-            @PathVariable("noteUuid") String noteUuid,
-            @RequestBody NoteAcknowledgeRequest acknowledgeRequest) {
-        try {
-            if (!Context.getUserContext().hasPrivilege(PrivilegeConstants.APPROVE_AMEND_NOTE)) {
-                return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege " + PrivilegeConstants.APPROVE_AMEND_NOTE), FORBIDDEN);
-            }
-            MedicationAdministrationNote updatedNote =
-                ipdMedicationAdministrationService.acknowledgeAmendment(noteUuid, acknowledgeRequest);
-            return new ResponseEntity<>(AmendmentNoteResponse.createFrom(updatedNote), OK);
-        } catch (Exception e) {
-            log.error("Runtime error while trying to acknowledge amendment", e);
             return new ResponseEntity<>(RestUtil.wrapErrorResponse(e, e.getMessage()), BAD_REQUEST);
         }
     }

@@ -23,7 +23,6 @@ public class MedicationAdministrationResponse {
     private String orderUuid;
     private List<MedicationAdministrationPerformerResponse> providers;
     private List<MedicationAdministrationNoteResponse> notes;
-    private List<AmendmentNoteResponse> amendedNotes;
     private String status;
     private String statusReason;
     private Object drug;
@@ -51,17 +50,9 @@ public class MedicationAdministrationResponse {
             }
         }
         List<MedicationAdministrationNoteResponse> notes = new java.util.ArrayList<>();
-        List<AmendmentNoteResponse> amendedNotes = new java.util.ArrayList<>();
-
         if (openmrsMedicationAdministration.getNotes() != null) {
             for (MedicationAdministrationNote note : openmrsMedicationAdministration.getNotes()) {
                 notes.add(MedicationAdministrationNoteResponse.createFrom(note));
-                if (note.getAmendedReason() != null) {
-                    AmendmentNoteResponse amendmentResponse = AmendmentNoteResponse.createFrom(note);
-                    if (amendmentResponse != null) {
-                        amendedNotes.add(amendmentResponse);
-                    }
-                }
             }
         }
         return MedicationAdministrationResponse.builder()
@@ -74,7 +65,6 @@ public class MedicationAdministrationResponse {
                 .orderUuid(orderUuid)
                 .providers(providers)
                 .notes(notes)
-                .amendedNotes(amendedNotes)
                 .drug(ConversionUtil.convertToRepresentation(openmrsMedicationAdministration.getDrug(), Representation.REF))
                 .dosingInstructions(openmrsMedicationAdministration.getDosingInstructions())
                 .dose(openmrsMedicationAdministration.getDose())
