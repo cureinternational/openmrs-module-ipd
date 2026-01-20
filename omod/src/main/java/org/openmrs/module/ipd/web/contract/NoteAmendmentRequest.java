@@ -6,7 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 
-import javax.validation.constraints.NotNull;
+import java.util.Date;
+import java.util.concurrent.TimeUnit;
 
 @Getter
 @Builder
@@ -16,6 +17,10 @@ import javax.validation.constraints.NotNull;
 public class NoteAmendmentRequest {
     private String amendedText;
     private String amendedReason;
-    @NotNull
     private String amendedByUuid;
+    private Long amendedDateTime;
+
+    public Date getAmendedDateTimeAsLocaltime() {
+        return this.amendedDateTime != null ? new Date(TimeUnit.SECONDS.toMillis(this.amendedDateTime)) : new Date();
+    }
 }

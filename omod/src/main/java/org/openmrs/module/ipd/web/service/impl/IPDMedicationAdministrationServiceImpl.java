@@ -33,12 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Objects;
-
-import static java.util.Objects.isNull;
-import static java.util.Objects.nonNull;
 
 
 @Transactional
@@ -138,19 +133,18 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
             NoteAmendmentRequest amendmentRequest) {
 
         MedicationAdministrationNote note = fhirMedicationAdministrationNoteDao.get(noteUuid);
-        if (isNull(note)) {
+        if (note == null) {
             throw new RuntimeException("Note not found with UUID: " + noteUuid);
         }
-        Provider provider = Context.getProviderService().getProviderByUuid(amendmentRequest.getAmendedByUuid());
 
-        if (nonNull(provider)) {
-            note.setAmendedBy(provider);
-        } else {
-            throw new RuntimeException("Provider not found with UUID: " + amendmentRequest.getAmendedByUuid());
+        if (amendmentRequest.getAmendedByUuid() != null) {
+            Provider provider = Context.getProviderService().getProviderByUuid(amendmentRequest.getAmendedByUuid());
+            if (provider != null) {
+                note.setAuthor(provider);
+            }
         }
-
         note.setAmendedText(amendmentRequest.getAmendedText());
-        note.setAmendedTime(new Date());
+        note.setRecordedTime(amendmentRequest.getAmendedDateTimeAsLocaltime());
         note.setAmendedReason(amendmentRequest.getAmendedReason());
         note.setApprovalStatus(ApprovalStatus.PENDING);
 
@@ -163,30 +157,26 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
             NoteAcknowledgeRequest acknowledgeRequest) {
 
         MedicationAdministrationNote amendmentNote = fhirMedicationAdministrationNoteDao.get(noteUuid);
-        if (isNull(amendmentNote)) {
+        if (amendmentNote == null) {
             throw new RuntimeException("Amendment note not found with UUID: " + noteUuid);
         }
 
-        if (isNull(amendmentNote.getAmendedReason())) {
+        if (amendmentNote.getAmendedReason() == null) {
             throw new RuntimeException("Note is not an amendment note");
         }
 
-        if (nonNull(amendmentNote.getApprovalStatus()) && amendmentNote.getApprovalStatus() != ApprovalStatus.PENDING) {
-            throw new RuntimeException("Amendment note has already been acknowledged");
-        }
-
-        if (isNull(acknowledgeRequest.getApprovalStatus()) || acknowledgeRequest.getApprovalStatus().trim().isEmpty()) {
+        if (acknowledgeRequest.getApprovalStatus() == null || acknowledgeRequest.getApprovalStatus().trim().isEmpty()) {
             throw new RuntimeException("Approval status is required when acknowledging an amendment");
         }
 
-
-        Provider provider = Context.getProviderService().getProviderByUuid(acknowledgeRequest.getApprovedByUuid());
-        if (nonNull(provider)) {
-            amendmentNote.setApprovedBy(provider);
-        } else {
-            throw new RuntimeException("Provider not found with UUID: " + acknowledgeRequest.getApprovedByUuid());
+        if (acknowledgeRequest.getApprovedByUuid() != null) {
+            Provider provider = Context.getProviderService().getProviderByUuid(acknowledgeRequest.getApprovedByUuid());
+            if (provider != null) {
+                amendmentNote.setApprovedBy(provider);
+            } else {
+                throw new RuntimeException("Provider not found with UUID: " + acknowledgeRequest.getApprovedByUuid());
+            }
         }
-
         amendmentNote.setApprovalStatus(ApprovalStatus.valueOf(acknowledgeRequest.getApprovalStatus().toUpperCase()));
         amendmentNote.setApprovedDateTime(acknowledgeRequest.getApprovedDateTimeAsLocaltime());
         amendmentNote.setApprovalNotes(acknowledgeRequest.getApprovalNotes());
