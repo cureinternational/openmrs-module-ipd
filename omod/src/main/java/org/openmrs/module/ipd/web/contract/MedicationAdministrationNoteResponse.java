@@ -19,6 +19,9 @@ public class MedicationAdministrationNoteResponse {
     private Object author;
     private Date recordedTime;
     private String text;
+    private String amendmentReason; // Reason for amendment (if this is an amended note)
+    private Integer previousNoteId; // ID of the previous note (if this is an amendment)
+    private Boolean isAmendment; // True if this is an amended note
 
     public static MedicationAdministrationNoteResponse createFrom(MedicationAdministrationNote openmrsObject) {
         return MedicationAdministrationNoteResponse.builder()
@@ -26,6 +29,10 @@ public class MedicationAdministrationNoteResponse {
                 .author(ConversionUtil.convertToRepresentation(openmrsObject.getAuthor(), Representation.REF))
                 .recordedTime(openmrsObject.getRecordedTime())
                 .text(openmrsObject.getText())
+                .amendmentReason(openmrsObject.getAmendmentReason())
+                .previousNoteId(openmrsObject.getPreviousNote() != null ?
+                    openmrsObject.getPreviousNote().getId() : null)
+                .isAmendment(openmrsObject.isAmendment())
                 .build();
     }
 }

@@ -32,6 +32,8 @@ public class MedicationAdministrationResponse {
     private Object route;
     private Object site;
     private Date administeredDateTime;
+    private Boolean isAcknowledged; // True if this medication administration is acknowledged
+    private MedicationAdministrationAcknowledgementResponse acknowledgement; // Acknowledgement details if exists
 
     public static MedicationAdministrationResponse createFrom(org.openmrs.module.ipd.api.model.MedicationAdministration openmrsMedicationAdministration) {
         if (openmrsMedicationAdministration == null) {
@@ -71,7 +73,14 @@ public class MedicationAdministrationResponse {
                 .doseUnits(ConversionUtil.convertToRepresentation(openmrsMedicationAdministration.getDoseUnits(), Representation.REF))
                 .route(ConversionUtil.convertToRepresentation(openmrsMedicationAdministration.getRoute(), Representation.REF))
                 .site(ConversionUtil.convertToRepresentation(openmrsMedicationAdministration.getSite(), Representation.REF))
+                .isAcknowledged(false) // Will be set by controller
+                .acknowledgement(null) // Will be set by controller
                 .build();
+    }
+
+    public void setAcknowledgementDetails(MedicationAdministrationAcknowledgementResponse acknowledgement) {
+        this.acknowledgement = acknowledgement;
+        this.isAcknowledged = (acknowledgement != null);
     }
 }
 
