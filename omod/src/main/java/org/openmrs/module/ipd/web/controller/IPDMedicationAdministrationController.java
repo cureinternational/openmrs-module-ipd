@@ -3,14 +3,10 @@ package org.openmrs.module.ipd.web.controller;
 import lombok.extern.slf4j.Slf4j;
 import org.hl7.fhir.r4.model.MedicationAdministration;
 import org.openmrs.api.context.Context;
-import org.openmrs.module.fhir2.apiext.FhirMedicationAdministrationService;
-import org.openmrs.module.fhir2.apiext.dao.FhirMedicationAdministrationAcknowledgementDao;
-import org.openmrs.module.fhir2.apiext.dao.FhirMedicationAdministrationDao;
-import org.openmrs.module.ipd.api.model.MedicationAdministrationAcknowledgement;
+import org.openmrs.module.fhirExtension.model.Task;
+import org.openmrs.module.fhirExtension.web.mapper.TaskMapper;
 import org.openmrs.module.ipd.api.model.MedicationAdministrationNote;
-import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationAcknowledgementRequest;
-import org.openmrs.module.ipd.web.contract.MedicationAdministrationAcknowledgementResponse;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationNoteRequest;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationNoteResponse;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationRequest;
@@ -40,21 +36,16 @@ public class IPDMedicationAdministrationController extends BaseRestController {
 
     private final IPDMedicationAdministrationService ipdMedicationAdministrationService;
     private final MedicationAdministrationFactory medicationAdministrationFactory;
-    private final FhirMedicationAdministrationService fhirMedicationAdministrationService;
-    private final FhirMedicationAdministrationAcknowledgementDao acknowledgementDao;
+    private final TaskMapper taskMapper;
     private static final Logger log = LoggerFactory.getLogger(IPDMedicationAdministrationController.class);
 
     @Autowired
     public IPDMedicationAdministrationController(IPDMedicationAdministrationService ipdMedicationAdministrationService,
-                                                 SlotService slotService,
-                                                 FhirMedicationAdministrationDao medicationAdministrationDao,
                                                  MedicationAdministrationFactory medicationAdministrationFactory,
-                                                 FhirMedicationAdministrationService fhirMedicationAdministrationService,
-                                                 FhirMedicationAdministrationAcknowledgementDao acknowledgementDao) {
+                                                 TaskMapper taskMapper) {
         this.ipdMedicationAdministrationService = ipdMedicationAdministrationService;
         this.medicationAdministrationFactory = medicationAdministrationFactory;
-        this.fhirMedicationAdministrationService = fhirMedicationAdministrationService;
-        this.acknowledgementDao = acknowledgementDao;
+        this.taskMapper = taskMapper;
     }
 
     @RequestMapping(value = "/scheduledMedicationAdministrations", method = RequestMethod.POST)
@@ -116,11 +107,7 @@ public class IPDMedicationAdministrationController extends BaseRestController {
                 return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege " + PrivilegeConstants.EDIT_MEDICATION_ADMINISTRATION), FORBIDDEN);
             }
 
-            MedicationAdministrationNote note = fhirMedicationAdministrationService.amendNote(
-                    medicationAdministrationUuid,
-                    noteRequest.getText(),
-                    noteRequest.getReason()
-            );
+            MedicationAdministrationNote note = ipdMedicationAdministrationService.amendNote(medicationAdministrationUuid, noteRequest);
 
             MedicationAdministrationNoteResponse response = MedicationAdministrationNoteResponse.createFrom(note);
             return new ResponseEntity<>(response, OK);
@@ -140,23 +127,8 @@ public class IPDMedicationAdministrationController extends BaseRestController {
                 return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege: Approve Amendment Note"), FORBIDDEN);
             }
 
-            MedicationAdministrationAcknowledgement acknowledgement = fhirMedicationAdministrationService.acknowledge(
-                    medicationAdministrationUuid,
-                    ackRequest.getRemarks()
-            );
-
-            MedicationAdministrationAcknowledgementResponse response = MedicationAdministrationAcknowledgementResponse.builder()
-                    .uuid(acknowledgement.getUuid())
-                    .actionType(acknowledgement.getActionType())
-                    .actionDatetime(acknowledgement.getActionDatetime())
-                    .acknowledgedBy(acknowledgement.getProvider() != null ?
-                            acknowledgement.getProvider().getName() : null)
-                    .acknowledgedByUuid(acknowledgement.getProvider() != null ?
-                            acknowledgement.getProvider().getUuid() : null)
-                    .remarks(acknowledgement.getRemarks())
-                    .build();
-
-            return new ResponseEntity<>(response, OK);
+            Task task = ipdMedicationAdministrationService.acknowledge(medicationAdministrationUuid, ackRequest);
+            return new ResponseEntity<>(taskMapper.constructResponse(task), OK);
         } catch (Exception e) {
             log.error("Runtime error while trying to acknowledge medication administration", e);
             return new ResponseEntity<>(RestUtil.wrapErrorResponse(e, e.getMessage()), BAD_REQUEST);
