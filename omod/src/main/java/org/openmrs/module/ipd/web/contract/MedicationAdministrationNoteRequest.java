@@ -19,6 +19,7 @@ public class MedicationAdministrationNoteRequest {
     private String authorUuid;
     private Long recordedTime;
     private String text;
+    private String reason;
 
     public Date getRecordedTimeAsLocaltime() {
         return this.recordedTime != null ? new Date(TimeUnit.SECONDS.toMillis(this.recordedTime)): new Date();
