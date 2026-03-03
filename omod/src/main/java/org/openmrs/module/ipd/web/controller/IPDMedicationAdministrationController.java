@@ -123,8 +123,8 @@ public class IPDMedicationAdministrationController extends BaseRestController {
             @PathVariable("uuid") String medicationAdministrationUuid,
             @RequestBody MedicationAdministrationAcknowledgementRequest ackRequest) {
         try {
-            if (!Context.getUserContext().hasPrivilege("Approve Amendment Note")) {
-                return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege: Approve Amendment Note"), FORBIDDEN);
+            if (!Context.getUserContext().hasPrivilege(PrivilegeConstants.APPROVE_AMEND_NOTE)) {
+                return new ResponseEntity<>(RestUtil.wrapErrorResponse(new Exception(), "User doesn't have the following privilege: " + PrivilegeConstants.APPROVE_AMEND_NOTE), FORBIDDEN);
             }
 
             Task task = ipdMedicationAdministrationService.acknowledge(medicationAdministrationUuid, ackRequest);
