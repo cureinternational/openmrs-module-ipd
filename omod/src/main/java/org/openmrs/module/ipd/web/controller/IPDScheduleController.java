@@ -174,7 +174,6 @@ public class IPDScheduleController extends BaseRestController {
             return Lists.newArrayList(MedicationScheduleResponse.createFrom(schedule, slots));
         }
 
-        // Collect PRN order UUIDs from AS_NEEDED_PLACEHOLDER slots
         List<String> prnOrderUuids = slots.stream()
                 .filter(s -> "AsNeededPlaceholder".equals(s.getServiceType().getName().getName())
                         && s.getOrder() != null)
@@ -182,7 +181,6 @@ public class IPDScheduleController extends BaseRestController {
                 .distinct()
                 .collect(Collectors.toList());
 
-        // Batch-fetch last administration time per PRN order
         Map<String, Long> lastAdminByOrder = new HashMap<>();
         if (!prnOrderUuids.isEmpty()) {
             String patientUuid = visit.getPatient().getUuid();

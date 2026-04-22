@@ -320,7 +320,6 @@ public class IPDMedicationAdministrationServiceImplTest {
 
     @Test
     public void shouldConvertPrnPlaceholderToAsNeededMedicationRequest_WhenSavingScheduledAdministration() {
-        // Arrange
         String slotUuid = "prn-slot-uuid";
         long administeredDateTime = System.currentTimeMillis() / 1000;
 
@@ -362,17 +361,14 @@ public class IPDMedicationAdministrationServiceImplTest {
         when(conceptService.getConceptByName(ServiceType.AS_NEEDED_MEDICATION_REQUEST.conceptName()))
                 .thenReturn(adminConcept);
 
-        // Act
         service.saveScheduledMedicationAdministration(request);
 
-        // Assert
         assertEquals("Service type should be converted to AsNeededMedicationRequest", adminConcept, slot.getServiceType());
         verify(slotService).saveSlot(slot);
     }
 
     @Test
     public void shouldNotConvertServiceType_WhenSlotIsNotPrnPlaceholder() {
-        // Arrange
         String slotUuid = "regular-slot-uuid";
 
         Concept regularConcept = mock(Concept.class);
@@ -405,10 +401,8 @@ public class IPDMedicationAdministrationServiceImplTest {
         when(medicationAdministrationToSlotStatusTranslator.toSlotStatus(any()))
                 .thenReturn(Slot.SlotStatus.COMPLETED);
 
-        // Act
         service.saveScheduledMedicationAdministration(request);
 
-        // Assert: service type should remain unchanged (no Context.getConceptService() call)
         assertEquals("Service type should not be changed for a non-PRN slot", regularConcept, slot.getServiceType());
         verify(slotService).saveSlot(slot);
     }

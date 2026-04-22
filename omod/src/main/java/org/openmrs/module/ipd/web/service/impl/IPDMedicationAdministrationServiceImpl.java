@@ -106,8 +106,6 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
             slot.setStatus(medicationAdministrationToSlotStatusTranslator.toSlotStatus(medicationAdministration.getStatus()));
             slot.setMedicationAdministration(openmrsAdministration);
 
-            // If this slot is a PRN placeholder, convert it in-place to an AsNeededMedicationRequest
-            // so that it appears correctly in the DrugChart at the actual administration time.
             if (ServiceType.AS_NEEDED_PLACEHOLDER.conceptName().equals(slot.getServiceType().getName().getName())) {
                 org.openmrs.Concept adminConcept = Context.getConceptService()
                         .getConceptByName(ServiceType.AS_NEEDED_MEDICATION_REQUEST.conceptName());
