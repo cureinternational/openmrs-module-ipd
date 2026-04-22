@@ -82,8 +82,16 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
                     .forEach(slotService::saveSlot);
         }
         else if (serviceType.equals(ServiceType.AS_NEEDED_PLACEHOLDER)){
-            Slot slot = slotFactory.createAsNeededPlaceholderSlot(savedSchedule, order, scheduleMedicationRequest.getComments());
-            slotService.saveSlot(slot);
+            List<Slot> existingPlaceholders = getMedicationSlots(
+                    scheduleMedicationRequest.getPatientUuid(),
+                    ServiceType.AS_NEEDED_PLACEHOLDER,
+                    new ArrayList<>(Arrays.asList(order.getUuid())));
+            boolean hasScheduledPlaceholder = existingPlaceholders.stream()
+                    .anyMatch(s -> s.getStatus().equals(SCHEDULED) && s.getMedicationAdministration() == null);
+            if (!hasScheduledPlaceholder) {
+                Slot slot = slotFactory.createAsNeededPlaceholderSlot(savedSchedule, order, scheduleMedicationRequest.getComments());
+                slotService.saveSlot(slot);
+            }
         }
 
         return savedSchedule;

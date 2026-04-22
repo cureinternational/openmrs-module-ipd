@@ -29,6 +29,9 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -170,8 +173,36 @@ public class IPDScheduleController extends BaseRestController {
         if(slots.isEmpty() && schedule != null){
             return Lists.newArrayList(MedicationScheduleResponse.createFrom(schedule, slots));
         }
+
+        // Collect PRN order UUIDs from AS_NEEDED_PLACEHOLDER slots
+        List<String> prnOrderUuids = slots.stream()
+                .filter(s -> "AsNeededPlaceholder".equals(s.getServiceType().getName().getName())
+                        && s.getOrder() != null)
+                .map(s -> s.getOrder().getUuid())
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Batch-fetch last administration time per PRN order
+        Map<String, Long> lastAdminByOrder = new HashMap<>();
+        if (!prnOrderUuids.isEmpty()) {
+            String patientUuid = visit.getPatient().getUuid();
+            List<Slot> adminSlots = ipdScheduleService.getMedicationSlots(
+                    patientUuid, ServiceType.AS_NEEDED_MEDICATION_REQUEST, new ArrayList<>(prnOrderUuids));
+            adminSlots.stream()
+                    .filter(s -> s.getOrder() != null)
+                    .collect(Collectors.groupingBy(
+                            s -> s.getOrder().getUuid(),
+                            Collectors.maxBy(Comparator.comparing(Slot::getStartDateTime))
+                    ))
+                    .forEach((orderUuid, optSlot) -> optSlot.ifPresent(s ->
+                            lastAdminByOrder.put(orderUuid,
+                                    org.openmrs.module.ipd.api.util.DateTimeUtil.convertLocalDateTimeToUTCEpoc(s.getStartDateTime()))));
+        }
+
         Map<Schedule, List<Slot>> slotsBySchedule = slots.stream().collect(Collectors.groupingBy(Slot::getSchedule));
-        return slotsBySchedule.entrySet().stream().map(entry -> MedicationScheduleResponse.createFrom(entry.getKey(), entry.getValue())).collect(Collectors.toList());
+        return slotsBySchedule.entrySet().stream()
+                .map(entry -> MedicationScheduleResponse.createFrom(entry.getKey(), entry.getValue(), lastAdminByOrder))
+                .collect(Collectors.toList());
     }
 
 }

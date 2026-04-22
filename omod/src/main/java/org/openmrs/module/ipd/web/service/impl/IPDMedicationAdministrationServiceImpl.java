@@ -102,8 +102,19 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
                 return fhirMedicationAdministrationService.get(medicationAdministrationRequest.getUuid());
             }
             org.hl7.fhir.r4.model.MedicationAdministration medicationAdministration = createMedicationAdministration(medicationAdministrationRequest);
+            MedicationAdministration openmrsAdministration = (MedicationAdministration) fhirMedicationAdministrationDao.get(medicationAdministration.getId());
             slot.setStatus(medicationAdministrationToSlotStatusTranslator.toSlotStatus(medicationAdministration.getStatus()));
-            slot.setMedicationAdministration((MedicationAdministration) fhirMedicationAdministrationDao.get(medicationAdministration.getId()));
+            slot.setMedicationAdministration(openmrsAdministration);
+
+            // If this slot is a PRN placeholder, convert it in-place to an AsNeededMedicationRequest
+            // so that it appears correctly in the DrugChart at the actual administration time.
+            if (ServiceType.AS_NEEDED_PLACEHOLDER.conceptName().equals(slot.getServiceType().getName().getName())) {
+                org.openmrs.Concept adminConcept = Context.getConceptService()
+                        .getConceptByName(ServiceType.AS_NEEDED_MEDICATION_REQUEST.conceptName());
+                slot.setServiceType(adminConcept);
+                slot.setStartDateTime(DateTimeUtil.convertEpocUTCToLocalTimeZone(medicationAdministrationRequest.getAdministeredDateTime()));
+            }
+
             slotService.saveSlot(slot);
             return medicationAdministration;
         }
@@ -131,9 +142,9 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
         MedicationAdministration openmrsMedicationAdministration = (MedicationAdministration) fhirMedicationAdministrationDao.get(medicationAdministration.getId());
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
         slotsStartTime.add(DateTimeUtil.convertEpocUTCToLocalTimeZone(medicationAdministrationRequest.getAdministeredDateTime()));
-        ServiceType serviceType = openmrsMedicationAdministration.getDrugOrder() == null ? ServiceType.EMERGENCY_MEDICATION_REQUEST : ServiceType.AS_NEEDED_MEDICATION_REQUEST;
-        slotFactory.createSlotsForMedicationFrom(schedule, slotsStartTime, openmrsMedicationAdministration.getDrugOrder(),
-                        openmrsMedicationAdministration, Slot.SlotStatus.COMPLETED, serviceType,"")
+        slotFactory.createSlotsForMedicationFrom(schedule, slotsStartTime, null,
+                        openmrsMedicationAdministration, Slot.SlotStatus.COMPLETED,
+                        ServiceType.EMERGENCY_MEDICATION_REQUEST, "")
                 .forEach(slotService::saveSlot);
         return medicationAdministration;
     }
