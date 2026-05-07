@@ -37,14 +37,6 @@
 		<description>Allows to Edit Emergency Medication Tasks</description>
 	</privilege>
 	<privilege>
-		<name>Edit Medication Administration</name>
-		<description>Allows to Edit Medication Administrations</description>
-	</privilege>
-	<privilege>
-		<name>Get Medication Administration</name>
-		<description>Allows to Get Medication Administrations</description>
-	</privilege>
-	<privilege>
 		<name>Get Medication Tasks</name>
 		<description>Allows to Get Medication Tasks</description>
 	</privilege>

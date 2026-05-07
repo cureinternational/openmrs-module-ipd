@@ -10,10 +10,8 @@ public class PrivilegeConstants {
     public static final String DELETE_MEDICATION_TASKS = "Delete Medication Tasks";
     @AddOnStartup(description = "Edit adhoc medication tasks description")
     public static final String EDIT_ADHOC_MEDICATION_TASKS = "Edit adhoc medication tasks";
-    @AddOnStartup(description = "Edit Medication Administration description")
-    public static final String EDIT_MEDICATION_ADMINISTRATION = "Edit Medication Administration";
-    @AddOnStartup(description = "Get Medication Administration description")
-    public static final String GET_MEDICATION_ADMINISTRATION = "Get Medication Administration";
+    public static final String EDIT_MEDICATION_ADMINISTRATION = org.openmrs.module.medicationadministration.util.PrivilegeConstants.EDIT_MEDICATION_ADMINISTRATION;
+    public static final String GET_MEDICATION_ADMINISTRATIONS = org.openmrs.module.medicationadministration.util.PrivilegeConstants.GET_MEDICATION_ADMINISTRATIONS;
     @AddOnStartup(description = "Get Medication Tasks description")
     public static final String GET_MEDICATION_TASKS = "Get Medication Tasks";
     @AddOnStartup(description = "Approve Amend Note description")
