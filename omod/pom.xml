@@ -125,13 +125,13 @@
 
 		<dependency>
 			<groupId>org.bahmni.module</groupId>
-			<artifactId>fhir2Extension-api</artifactId>
+			<artifactId>fhir2-extension-api</artifactId>
 			<scope>provided</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.bahmni.module</groupId>
-			<artifactId>fhir2Extension-omod</artifactId>
+			<artifactId>fhir2-extension-omod</artifactId>
 			<scope>provided</scope>
 		</dependency>
 
