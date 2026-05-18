@@ -15,7 +15,7 @@
 		<require_module>org.bahmni.module.bahmnicore</require_module>
 		<require_module>org.openmrs.module.bedmanagement</require_module>
 		<require_module>org.bahmni.module.medication-administration</require_module>
-		<require_module>org.bahmni.module.fhir2Extension</require_module>
+		<require_module>org.bahmni.module.fhir2-extension</require_module>
 	</require_modules>
 
 	<globalProperty>
