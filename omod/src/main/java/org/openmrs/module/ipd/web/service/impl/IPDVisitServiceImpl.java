@@ -71,11 +71,10 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         List<String> visitUuidsList = new ArrayList<>();
         visitUuidsList.add(visitUuid);
         Visit visit = visitService.getVisitByUuid(visitUuid);
-        // Logic to fetch immediate preceded OPD Visit's drug orders as well as doctors tend to convert OPD to IPD immediately on emergency situations.
-        String precededVisitUuid= getImmediatePrecededOPDVisit(visit.getPatient(),visitUuid);
-        if (precededVisitUuid!=null){
-            visitUuidsList.add(precededVisitUuid);
-        }
+        // Fetch drug orders from preceding OPD and preceding closed IPD visits.
+        // OPD: covers same-day OPD-to-IPD emergency conversions.
+        // Closed IPD: covers active drugs from the patient's most recent prior admission.
+        visitUuidsList.addAll(getPrecedingVisitUuids(visit.getPatient(), visitUuid));
         List<DrugOrder> prescribedDrugOrders = drugOrderService.getPrescribedDrugOrders(visitUuidsList, visit.getPatient().getUuid(), includeActiveVisit, numberOfVisits, startDate, endDate, getEffectiveOrdersOnly);
         return getIPDDrugOrders(visit.getPatient().getUuid(), prescribedDrugOrders,visit);
     }
@@ -171,10 +170,9 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         return slotService.getSlotsByPatientAndVisitAndServiceType(subjectReference.get(), visit, concept);
     }
 
-    private String getImmediatePrecededOPDVisit(Patient patient,String currentVisitUuid){
-        String previousOPDVisitUuid=null;
-        List<Visit> visits= visitService.getVisitsByPatient(patient);
-        List<Visit> sortedVisits = visits.stream()
+    private List<String> getPrecedingVisitUuids(Patient patient, String currentVisitUuid) {
+        List<String> result = new ArrayList<>();
+        List<Visit> sortedVisits = visitService.getVisitsByPatient(patient).stream()
                 .sorted(Comparator.comparing(Visit::getStartDatetime).reversed())
                 .collect(Collectors.toList());
 
@@ -183,12 +181,21 @@ public class IPDVisitServiceImpl implements IPDVisitService {
                 .findFirst()
                 .orElse(-1);
 
-        if (currentVisitIndex != -1 && currentVisitIndex + 1 < sortedVisits.size()) {
-            Visit previousVisit = sortedVisits.get(currentVisitIndex + 1);
-            if ("OPD".equals(previousVisit.getVisitType().getName())){
-                previousOPDVisitUuid=previousVisit.getUuid();
+        if (currentVisitIndex == -1) return result;
+
+        boolean foundOPD = false, foundClosedIPD = false;
+        for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
+            if (foundOPD && foundClosedIPD) break;
+            Visit v = sortedVisits.get(i);
+            String visitType = v.getVisitType().getName();
+            if (!foundOPD && "OPD".equals(visitType)) {
+                result.add(v.getUuid());
+                foundOPD = true;
+            } else if (!foundClosedIPD && "IPD".equals(visitType) && v.getStopDatetime() != null) {
+                result.add(v.getUuid());
+                foundClosedIPD = true;
             }
         }
-        return previousOPDVisitUuid;
+        return result;
     }
 }
