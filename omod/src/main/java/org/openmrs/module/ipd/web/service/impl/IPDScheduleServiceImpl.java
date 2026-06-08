@@ -73,12 +73,14 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
         DrugOrder order = (DrugOrder) orderService.getOrderByUuid(scheduleMedicationRequest.getOrderUuid());
         ServiceType serviceType = scheduleMedicationRequest.getServiceType() !=null ? scheduleMedicationRequest.getServiceType() : ServiceType.MEDICATION_REQUEST;
         if(serviceType.equals(ServiceType.MEDICATION_REQUEST)){
-            List<Slot> existingSlots = getMedicationSlots(patient.getUuid(),ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{order.getUuid()})));
-            if (existingSlots !=null && !existingSlots.isEmpty()) {
-                throw new RuntimeException("Slots already created for this drug order");
+            List<Slot> existingSlots = getMedicationSlots(patient.getUuid(), ServiceType.MEDICATION_REQUEST, new ArrayList<>(Arrays.asList(new String[]{order.getUuid()})));
+            boolean stageAlreadyScheduled = existingSlots != null && existingSlots.stream()
+                .anyMatch(s -> java.util.Objects.equals(s.getVariableDosageSequence(), scheduleMedicationRequest.getVariableDosageSequence()));
+            if (stageAlreadyScheduled) {
+                throw new RuntimeException("Slots already created for this drug order stage");
             }
             List<LocalDateTime> slotsStartTime = slotTimeCreationService.createSlotsStartTimeFrom(scheduleMedicationRequest, order);
-            slotFactory.createSlotsForMedicationFrom(savedSchedule, slotsStartTime, order, null, SCHEDULED, ServiceType.MEDICATION_REQUEST, scheduleMedicationRequest.getComments())
+            slotFactory.createSlotsForMedicationFrom(savedSchedule, slotsStartTime, order, null, SCHEDULED, ServiceType.MEDICATION_REQUEST, scheduleMedicationRequest.getComments(), scheduleMedicationRequest.getVariableDosageSequence())
                     .forEach(slotService::saveSlot);
         }
         else if (serviceType.equals(ServiceType.AS_NEEDED_PLACEHOLDER)){
@@ -126,13 +128,15 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
 
     @Override
     public Schedule updateMedicationSchedule(ScheduleMedicationRequest scheduleMedicationRequest) {
-        voidExistingMedicationSlotsForOrder(scheduleMedicationRequest.getPatientUuid(),scheduleMedicationRequest.getOrderUuid(),"");
+        voidExistingMedicationSlotsForOrder(scheduleMedicationRequest.getPatientUuid(), scheduleMedicationRequest.getOrderUuid(), "", scheduleMedicationRequest.getVariableDosageSequence());
         return saveMedicationSchedule(scheduleMedicationRequest);
     }
 
-    private void voidExistingMedicationSlotsForOrder(String patientUuid,String orderUuid,String voidReason){
-        List<Slot> existingSlots = getMedicationSlots(patientUuid,ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{orderUuid})));
-        existingSlots.stream().forEach(slot -> slotService.voidSlot(slot,voidReason));
+    private void voidExistingMedicationSlotsForOrder(String patientUuid, String orderUuid, String voidReason, Integer variableDosageSequence) {
+        List<Slot> existingSlots = getMedicationSlots(patientUuid, ServiceType.MEDICATION_REQUEST, new ArrayList<>(Arrays.asList(new String[]{orderUuid})));
+        existingSlots.stream()
+            .filter(s -> java.util.Objects.equals(s.getVariableDosageSequence(), variableDosageSequence))
+            .forEach(slot -> slotService.voidSlot(slot, voidReason));
     }
 
 

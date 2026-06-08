@@ -38,7 +38,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
     }
 
     private List<LocalDateTime> getSlotsStartTimeWithFixedScheduleFrequency(ScheduleMedicationRequest request, DrugOrder order) {
-        int numberOfSlotsStartTimeToBeCreated = (int) (Math.ceil(order.getQuantity() / order.getDose()));
+        int numberOfSlotsStartTimeToBeCreated = request.getNumberOfSlots() != null
+            ? request.getNumberOfSlots()
+            : (int) (Math.ceil(order.getQuantity() / order.getDose()));
 
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
         if (!CollectionUtils.isEmpty(request.getFirstDaySlotsStartTimeAsLocalTime())) {
@@ -83,9 +85,13 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
     }
 
     private List<LocalDateTime> getSlotsStartTimeWithStartTimeDurationFrequency(ScheduleMedicationRequest request, DrugOrder order) {
-        int numberOfSlotsStartTimeToBeCreated = (order.getQuantity() == 0.0 || order.getFrequency() == null || order.getDuration() == null) ? 1 : (int) (Math.ceil(order.getQuantity() / order.getDose()));
+        int numberOfSlotsStartTimeToBeCreated = request.getNumberOfSlots() != null
+            ? request.getNumberOfSlots()
+            : (order.getQuantity() == 0.0 || order.getFrequency() == null || order.getDuration() == null) ? 1 : (int) (Math.ceil(order.getQuantity() / order.getDose()));
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
-        Double slotDurationInHours =  order.getFrequency() != null ? 24 / order.getFrequency().getFrequencyPerDay() : 0;
+        Double slotDurationInHours = order.getFrequency() != null
+            ? 24 / order.getFrequency().getFrequencyPerDay()
+            : (request.getStageFrequencyPerDay() != null ? 24.0 / request.getStageFrequencyPerDay() : 0);
         LocalDateTime slotStartTime = request.getSlotStartTimeAsLocaltime();
         while (numberOfSlotsStartTimeToBeCreated-- > 0) {
             slotsStartTime.add(slotStartTime);
