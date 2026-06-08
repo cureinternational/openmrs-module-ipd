@@ -1,9 +1,13 @@
 package org.openmrs.module.ipd.web.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.openmrs.DrugOrder;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
+import org.openmrs.module.ipd.web.model.StageScheduleStatus;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.springframework.stereotype.Component;
@@ -18,11 +22,14 @@ import java.util.stream.Collectors;
 import static org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY;
 import static org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest.MedicationFrequency.START_TIME_DURATION_FREQUENCY;
 
+@Slf4j
 @Service
 @Component
 public class SlotTimeCreationService extends BaseOpenmrsService {
 
-    public static final List<String> START_TIME_FREQUENCIES= Arrays.asList(new String[]{"Every Hour", "Every 2 hours", "Every 3 hours", "Every 4 hours", "Every 6 hours", "Every 8 hours", "Every 12 hours", "Once a day", "Nocte (At Night)", "Every 30 minutes", "STAT (Immediately)", "In Afternoon", "In Morning", "Once a week", "Twice a week", "Three times a week", "Four days a week", "Five days a week", "Six days a week", "On alternate days", "Monthly", "Once a month", "Every 2 weeks", "Every 3 weeks"});
+    public static final List<String> START_TIME_FREQUENCIES = Arrays.asList("Every Hour", "Every 2 hours", "Every 3 hours", "Every 4 hours", "Every 6 hours", "Every 8 hours", "Every 12 hours", "Once a day", "Nocte (At Night)", "Every 30 minutes", "STAT (Immediately)", "In Afternoon", "In Morning", "Once a week", "Twice a week", "Three times a week", "Four days a week", "Five days a week", "Six days a week", "On alternate days", "Monthly", "Once a month", "Every 2 weeks", "Every 3 weeks");
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public List<LocalDateTime> createSlotsStartTimeFrom(ScheduleMedicationRequest request, DrugOrder order) {
         if (request.getSlotStartTimeAsLocaltime() != null && request.getMedicationFrequency() == START_TIME_DURATION_FREQUENCY) {
@@ -143,9 +150,120 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                     }
                 }
             }
-            drugOrderSchedule.setSlots(slotsByOrder.get(drugOrder));
+            List<Slot> slots = slotsByOrder.get(drugOrder);
+            drugOrderSchedule.setSlots(slots);
+            drugOrderSchedule.setStageSchedules(buildStageSchedules(slots));
             drugOrderScheduleHash.put(drugOrder.getUuid(),drugOrderSchedule);
         }
         return drugOrderScheduleHash;
+    }
+
+    public List<StageScheduleStatus> buildStageSchedules(List<Slot> slots) {
+        if (slots == null || slots.isEmpty()) return Collections.emptyList();
+
+        Map<Integer, List<Slot>> bySequence = slots.stream()
+            .filter(s -> s.getVariableDosageSequence() != null)
+            .collect(Collectors.groupingBy(Slot::getVariableDosageSequence));
+
+        if (bySequence.isEmpty()) return Collections.emptyList();
+
+        return bySequence.entrySet().stream()
+            .map(e -> {
+                List<Slot> stageSlots = e.getValue();
+                Integer sequence = e.getKey();
+
+                Long stageSlotStartTime = null;
+                List<Long> stageDayWise = null;
+                List<Long> stageFirstDay = null;
+                List<Long> stageRemainingDay = null;
+
+                boolean isStartTimeFrequency = isStartTimeFrequencyForStage(stageSlots.get(0), sequence);
+
+                if (isStartTimeFrequency) {
+                    stageSlotStartTime = stageSlots.stream()
+                        .filter(s -> s.getStartDateTime() != null)
+                        .min(Comparator.comparing(Slot::getStartDateTime))
+                        .map(s -> DateTimeUtil.convertLocalDateTimeToUTCEpoc(s.getStartDateTime()))
+                        .orElse(null);
+                } else {
+                    TreeMap<LocalDate, List<LocalDateTime>> slotsByDate = stageSlots.stream()
+                        .filter(s -> s.getStartDateTime() != null)
+                        .collect(Collectors.groupingBy(
+                            s -> s.getStartDateTime().toLocalDate(),
+                            TreeMap::new,
+                            Collectors.mapping(Slot::getStartDateTime, Collectors.toList())
+                        ));
+                    List<List<LocalDateTime>> sortedDaySlots = new ArrayList<>(slotsByDate.values());
+
+                    if (!sortedDaySlots.isEmpty()) {
+                        if (sortedDaySlots.size() == 1 || sortedDaySlots.get(0).size() == sortedDaySlots.get(1).size()) {
+                            stageDayWise = sortedDaySlots.get(0).stream()
+                                .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                                .collect(Collectors.toList());
+                        } else {
+                            stageFirstDay = sortedDaySlots.get(0).stream()
+                                .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                                .collect(Collectors.toList());
+                            if (sortedDaySlots.size() > 1) {
+                                stageDayWise = sortedDaySlots.get(1).stream()
+                                    .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                                    .collect(Collectors.toList());
+                            }
+                            if (sortedDaySlots.size() > 2) {
+                                stageRemainingDay = sortedDaySlots.get(sortedDaySlots.size() - 1).stream()
+                                    .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                                    .collect(Collectors.toList());
+                            }
+                        }
+                    }
+                }
+
+                return StageScheduleStatus.builder()
+                    .variableDosageSequence(sequence)
+                    .isScheduled(true)
+                    .administrationStarted(stageSlots.stream().anyMatch(s -> s.getMedicationAdministration() != null))
+                    .allAttended(stageSlots.stream().noneMatch(s -> s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
+                    .pendingSlotsAvailable(stageSlots.stream().anyMatch(s ->
+                        s.getStartDateTime() != null &&
+                        LocalDateTime.now().isBefore(s.getStartDateTime()) &&
+                        s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
+                    .notes(stageSlots.get(0).getNotes())
+                    .slotStartTime(stageSlotStartTime)
+                    .firstDaySlotsStartTime(stageFirstDay)
+                    .dayWiseSlotsStartTime(stageDayWise)
+                    .remainingDaySlotsStartTime(stageRemainingDay)
+                    .build();
+            })
+            .collect(Collectors.toList());
+    }
+
+    private boolean isStartTimeFrequencyForStage(Slot slot, Integer sequence) {
+        try {
+            DrugOrder drugOrder = (DrugOrder) slot.getOrder();
+            String dosingInstructions = drugOrder.getDosingInstructions();
+            if (dosingInstructions == null) return true;
+
+            JsonNode dosages = MAPPER.readTree(dosingInstructions);
+            if (!dosages.isArray()) return true;
+
+            for (JsonNode dosage : dosages) {
+                if (dosage.path("sequence").asInt() != sequence) continue;
+
+                // Loading dose is always start-time regardless of frequency name
+                JsonNode extensions = dosage.path("extension");
+                for (JsonNode ext : extensions) {
+                    if ("isLoadingDose".equals(ext.path("url").asText()) && ext.path("valueBoolean").asBoolean(false)) {
+                        return true;
+                    }
+                }
+
+                String frequencyName = dosage.path("timing").path("code").path("text").asText(null);
+                return START_TIME_FREQUENCIES.contains(frequencyName);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to determine scheduling mode for slot order {}",
+                slot.getOrder() != null ? slot.getOrder().getUuid() : "null", e);
+        }
+        return true;
     }
 }

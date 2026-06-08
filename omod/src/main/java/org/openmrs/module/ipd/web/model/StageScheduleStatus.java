@@ -1,9 +1,12 @@
 package org.openmrs.module.ipd.web.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 @Getter
 @Builder
@@ -11,13 +14,14 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class StageScheduleStatus {
     private Integer variableDosageSequence;
+    @JsonProperty("isScheduled")
     private Boolean isScheduled;
     private Boolean administrationStarted;
     private Boolean allAttended;
     private Boolean pendingSlotsAvailable;
     private String notes;
     private Long slotStartTime;
-    private java.util.List<Long> firstDaySlotsStartTime;
-    private java.util.List<Long> dayWiseSlotsStartTime;
-    private java.util.List<Long> remainingDaySlotsStartTime;
+    private List<Long> firstDaySlotsStartTime;
+    private List<Long> dayWiseSlotsStartTime;
+    private List<Long> remainingDaySlotsStartTime;
 }

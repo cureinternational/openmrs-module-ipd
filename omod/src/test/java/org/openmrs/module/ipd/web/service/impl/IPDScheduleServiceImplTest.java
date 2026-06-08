@@ -30,6 +30,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
 
+import org.openmrs.api.APIException;
+
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -225,8 +227,8 @@ public class IPDScheduleServiceImplTest {
 
         try {
             service.saveMedicationSchedule(request);
-            fail("Expected RuntimeException to be thrown");
-        } catch (RuntimeException e) {
+            fail("Expected APIException to be thrown");
+        } catch (APIException e) {
             assertNotNull(e.getMessage());
         }
     }
@@ -249,8 +251,8 @@ public class IPDScheduleServiceImplTest {
 
         try {
             service.saveMedicationSchedule(request);
-            fail("Expected RuntimeException to be thrown");
-        } catch (RuntimeException e) {
+            fail("Expected APIException to be thrown");
+        } catch (APIException e) {
             assertNotNull(e.getMessage());
         }
     }
@@ -290,7 +292,7 @@ public class IPDScheduleServiceImplTest {
 
         // Only stage-1 slot should have been voided
         verify(slotService, times(1)).voidSlot(any(), any());
-        verify(slotService).voidSlot(stage1Slot, "");
+        verify(slotService).voidSlot(stage1Slot, "Edit drug chart");
     }
 
     @Test

@@ -7,6 +7,7 @@ import org.openmrs.module.ipd.api.model.MedicationAdministration;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 import org.openmrs.module.ipd.web.model.StageScheduleStatus;
+import org.openmrs.module.ipd.web.service.impl.SlotTimeCreationService;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -21,6 +22,8 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(MockitoJUnitRunner.class)
 public class DrugOrderScheduleResponseTest {
+
+    private final SlotTimeCreationService slotTimeCreationService = new SlotTimeCreationService();
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -42,6 +45,7 @@ public class DrugOrderScheduleResponseTest {
     private DrugOrderSchedule makeSchedule(List<Slot> slots) {
         DrugOrderSchedule schedule = new DrugOrderSchedule();
         schedule.setSlots(slots);
+        schedule.setStageSchedules(slotTimeCreationService.buildStageSchedules(slots));
         return schedule;
     }
 

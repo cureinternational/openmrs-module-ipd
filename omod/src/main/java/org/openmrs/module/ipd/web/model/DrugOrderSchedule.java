@@ -2,6 +2,7 @@ package org.openmrs.module.ipd.web.model;
 
 import lombok.*;
 import org.openmrs.module.ipd.api.model.Slot;
+import org.openmrs.module.ipd.web.model.StageScheduleStatus;
 
 import java.util.List;
 
@@ -18,4 +19,5 @@ public class DrugOrderSchedule {
     private Long slotStartTime;
     private List<Slot> slots;
     private String notes;
+    private List<StageScheduleStatus> stageSchedules;
 }
