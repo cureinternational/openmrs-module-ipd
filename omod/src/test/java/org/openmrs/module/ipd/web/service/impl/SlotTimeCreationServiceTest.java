@@ -162,8 +162,9 @@ public class SlotTimeCreationServiceTest {
     }
 
     @Test
-    public void shouldProduceFirstDayAndDayWise_ForFixedScheduleVdpStageWithNonUniformFirstDay() {
-        // Day 1 has 1 slot (different count), day 2 has 2 slots
+    public void shouldProduceFirstDayAndRemainingDay_ForFixedScheduleVdpStageWithNonUniformFirstDay() {
+        // Day 1 has 1 slot (partial), day 2 has 2 slots — matches regular order behaviour:
+        // firstDay=day1, remainingDay=day2, dayWise=null (same as getDrugOrderScheduledTime)
         LocalDateTime day1Slot1 = LocalDateTime.of(2026, 5, 1, 14, 0);
         LocalDateTime day2Slot1 = LocalDateTime.of(2026, 5, 2, 8, 0);
         LocalDateTime day2Slot2 = LocalDateTime.of(2026, 5, 2, 20, 0);
@@ -176,10 +177,36 @@ public class SlotTimeCreationServiceTest {
 
         assertEquals(1, result.size());
         StageScheduleStatus stage = result.get(0);
-        assertNotNull("firstDaySlotsStartTime should be populated when day 1 differs", stage.getFirstDaySlotsStartTime());
+        assertNotNull("firstDaySlotsStartTime should be populated when day 1 is partial", stage.getFirstDaySlotsStartTime());
         assertEquals(1, stage.getFirstDaySlotsStartTime().size());
-        assertNotNull("dayWiseSlotsStartTime should be populated from day 2", stage.getDayWiseSlotsStartTime());
+        assertNotNull("remainingDaySlotsStartTime should be populated from last day", stage.getRemainingDaySlotsStartTime());
+        assertEquals(2, stage.getRemainingDaySlotsStartTime().size());
+        assertNull("dayWiseSlotsStartTime should be null for exactly 2 calendar days", stage.getDayWiseSlotsStartTime());
+    }
+
+    @Test
+    public void shouldProduceFirstDayDayWiseAndRemainingDay_ForThreePlusCalendarDays() {
+        // Day 1: 1 slot (partial), Day 2: 2 slots (full pattern), Day 3: 1 slot (partial last day)
+        LocalDateTime day1Slot1 = LocalDateTime.of(2026, 5, 1, 14, 0);
+        LocalDateTime day2Slot1 = LocalDateTime.of(2026, 5, 2, 8, 0);
+        LocalDateTime day2Slot2 = LocalDateTime.of(2026, 5, 2, 20, 0);
+        LocalDateTime day3Slot1 = LocalDateTime.of(2026, 5, 3, 8, 0);
+
+        Slot s1 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day1Slot1, false);
+        Slot s2 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day2Slot1, false);
+        Slot s3 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day2Slot2, false);
+        Slot s4 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day3Slot1, false);
+
+        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Arrays.asList(s1, s2, s3, s4));
+
+        assertEquals(1, result.size());
+        StageScheduleStatus stage = result.get(0);
+        assertNotNull("firstDaySlotsStartTime should be populated for partial first day", stage.getFirstDaySlotsStartTime());
+        assertEquals(1, stage.getFirstDaySlotsStartTime().size());
+        assertNotNull("dayWiseSlotsStartTime should be populated from day 2 when 3+ days", stage.getDayWiseSlotsStartTime());
         assertEquals(2, stage.getDayWiseSlotsStartTime().size());
+        assertNotNull("remainingDaySlotsStartTime should be populated from last day", stage.getRemainingDaySlotsStartTime());
+        assertEquals(1, stage.getRemainingDaySlotsStartTime().size());
     }
 
     @Test

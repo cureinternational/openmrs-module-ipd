@@ -204,13 +204,11 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                             stageFirstDay = sortedDaySlots.get(0).stream()
                                 .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
                                 .collect(Collectors.toList());
-                            if (sortedDaySlots.size() > 1) {
-                                stageDayWise = sortedDaySlots.get(1).stream()
-                                    .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
-                                    .collect(Collectors.toList());
-                            }
+                            stageRemainingDay = sortedDaySlots.get(sortedDaySlots.size() - 1).stream()
+                                .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                                .collect(Collectors.toList());
                             if (sortedDaySlots.size() > 2) {
-                                stageRemainingDay = sortedDaySlots.get(sortedDaySlots.size() - 1).stream()
+                                stageDayWise = sortedDaySlots.get(1).stream()
                                     .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
                                     .collect(Collectors.toList());
                             }
