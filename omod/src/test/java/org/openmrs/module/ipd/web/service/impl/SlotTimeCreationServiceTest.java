@@ -38,14 +38,9 @@ public class SlotTimeCreationServiceTest {
     // Helper methods
     // -----------------------------------------------------------------------
 
-    /**
-     * Builds a FIXED_SCHEDULE_FREQUENCY request with the given numberOfSlots and
-     * a dayWiseSlotsStartTime list of the requested size (all pointing to future times).
-     */
-    private ScheduleMedicationRequest buildFixedRequest(Integer numberOfSlots, List<Long> dayWise) {
+    private ScheduleMedicationRequest buildFixedRequest(List<Long> dayWise) {
         return ScheduleMedicationRequest.builder()
                 .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
-                .numberOfSlots(numberOfSlots)
                 .dayWiseSlotsStartTime(dayWise)
                 .build();
     }
@@ -76,21 +71,10 @@ public class SlotTimeCreationServiceTest {
     // -----------------------------------------------------------------------
 
     @Test
-    public void shouldUseNumberOfSlots_WhenSetInRequest_FixedSchedule() {
-        // quantity=6, dose=2 → normal fallback would be 3 slots; numberOfSlots overrides to 2
-        DrugOrder order = buildDrugOrder(6.0, 2.0);
-        ScheduleMedicationRequest request = buildFixedRequest(2, futureEpochList(6));
-
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
-
-        assertEquals(2, result.size());
-    }
-
-    @Test
-    public void shouldFallBackToQuantityDivDose_WhenNumberOfSlotsIsNull_FixedSchedule() {
+    public void shouldUseQuantityDivDose_ForRegularOrders_FixedSchedule() {
         // quantity=6, dose=2 → ceil(6/2) = 3 slots
         DrugOrder order = buildDrugOrder(6.0, 2.0);
-        ScheduleMedicationRequest request = buildFixedRequest(null, futureEpochList(6));
+        ScheduleMedicationRequest request = buildFixedRequest(futureEpochList(6));
 
         List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
@@ -98,22 +82,10 @@ public class SlotTimeCreationServiceTest {
     }
 
     @Test
-    public void shouldUseNumberOfSlots_WhenSetToOne_OverridesQuantityDivDoseResult() {
-        // numberOfSlots=1 should cap the result even though quantity/dose gives 3
-        DrugOrder order = buildDrugOrder(6.0, 2.0);
-        ScheduleMedicationRequest request = buildFixedRequest(1, futureEpochList(6));
-
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
-
-        assertEquals(1, result.size());
-    }
-
-    @Test
     public void shouldReturnEmptyList_WhenNoTimeListsProvided() {
         DrugOrder order = buildDrugOrder(6.0, 2.0);
         ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
                 .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
-                .numberOfSlots(3)
                 .build();
 
         List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);

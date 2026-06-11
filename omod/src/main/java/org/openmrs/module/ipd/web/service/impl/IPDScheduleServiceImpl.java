@@ -16,6 +16,7 @@ import org.openmrs.module.ipd.api.service.ReferenceService;
 import org.openmrs.module.ipd.api.service.ScheduleService;
 import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
+import org.openmrs.module.ipd.api.util.IPDConstants;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.ScheduleFactory;
 import org.openmrs.module.ipd.web.factory.SlotFactory;
@@ -129,7 +130,7 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
 
     @Override
     public Schedule updateMedicationSchedule(ScheduleMedicationRequest scheduleMedicationRequest) {
-        voidExistingMedicationSlotsForOrder(scheduleMedicationRequest.getPatientUuid(), scheduleMedicationRequest.getOrderUuid(), "Edit drug chart", scheduleMedicationRequest.getVariableDosageSequence());
+        voidExistingMedicationSlotsForOrder(scheduleMedicationRequest.getPatientUuid(), scheduleMedicationRequest.getOrderUuid(), IPDConstants.EDIT_DRUG_CHART_VOID_REASON, scheduleMedicationRequest.getVariableDosageSequence());
         return saveMedicationSchedule(scheduleMedicationRequest);
     }
 

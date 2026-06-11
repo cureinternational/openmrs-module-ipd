@@ -45,8 +45,8 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
     }
 
     private List<LocalDateTime> getSlotsStartTimeWithFixedScheduleFrequency(ScheduleMedicationRequest request, DrugOrder order) {
-        int numberOfSlotsStartTimeToBeCreated = request.getNumberOfSlots() != null
-            ? request.getNumberOfSlots()
+        int numberOfSlotsStartTimeToBeCreated = order.getFrequency() == null && request.getVariableDosageSequence() != null
+            ? computeVdpNumberOfSlots(order, request.getVariableDosageSequence())
             : (int) (Math.ceil(order.getQuantity() / order.getDose()));
 
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
@@ -92,13 +92,15 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
     }
 
     private List<LocalDateTime> getSlotsStartTimeWithStartTimeDurationFrequency(ScheduleMedicationRequest request, DrugOrder order) {
-        int numberOfSlotsStartTimeToBeCreated = request.getNumberOfSlots() != null
-            ? request.getNumberOfSlots()
+        int numberOfSlotsStartTimeToBeCreated = order.getFrequency() == null && request.getVariableDosageSequence() != null
+            ? computeVdpNumberOfSlots(order, request.getVariableDosageSequence())
             : (order.getQuantity() == 0.0 || order.getFrequency() == null || order.getDuration() == null) ? 1 : (int) (Math.ceil(order.getQuantity() / order.getDose()));
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
         Double slotDurationInHours = order.getFrequency() != null
             ? 24 / order.getFrequency().getFrequencyPerDay()
-            : (request.getStageFrequencyPerDay() != null ? 24.0 / request.getStageFrequencyPerDay() : 0);
+            : (request.getVariableDosageSequence() != null
+                ? 24.0 / getFrequencyPerDayFromFhir(order, request.getVariableDosageSequence())
+                : 0);
         LocalDateTime slotStartTime = request.getSlotStartTimeAsLocaltime();
         while (numberOfSlotsStartTimeToBeCreated-- > 0) {
             slotsStartTime.add(slotStartTime);
@@ -168,71 +170,125 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         if (bySequence.isEmpty()) return Collections.emptyList();
 
         return bySequence.entrySet().stream()
-            .map(e -> {
-                List<Slot> stageSlots = e.getValue();
-                Integer sequence = e.getKey();
+            .map(e -> buildStageScheduleStatus(e.getValue(), e.getKey()))
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+    }
 
-                Long stageSlotStartTime = null;
-                List<Long> stageDayWise = null;
-                List<Long> stageFirstDay = null;
-                List<Long> stageRemainingDay = null;
+    private StageScheduleStatus buildStageScheduleStatus(List<Slot> stageSlots, Integer sequence) {
+        if (stageSlots.isEmpty()) return null;
 
-                boolean isStartTimeFrequency = isStartTimeFrequencyForStage(stageSlots.get(0), sequence);
+        boolean isStartTimeFrequency = isStartTimeFrequencyForStage(stageSlots.get(0), sequence);
 
-                if (isStartTimeFrequency) {
-                    stageSlotStartTime = stageSlots.stream()
-                        .filter(s -> s.getStartDateTime() != null)
-                        .min(Comparator.comparing(Slot::getStartDateTime))
-                        .map(s -> DateTimeUtil.convertLocalDateTimeToUTCEpoc(s.getStartDateTime()))
-                        .orElse(null);
-                } else {
-                    TreeMap<LocalDate, List<LocalDateTime>> slotsByDate = stageSlots.stream()
-                        .filter(s -> s.getStartDateTime() != null)
-                        .collect(Collectors.groupingBy(
-                            s -> s.getStartDateTime().toLocalDate(),
-                            TreeMap::new,
-                            Collectors.mapping(Slot::getStartDateTime, Collectors.toList())
-                        ));
-                    List<List<LocalDateTime>> sortedDaySlots = new ArrayList<>(slotsByDate.values());
+        StageScheduleStatus.StageScheduleStatusBuilder builder = StageScheduleStatus.builder()
+            .variableDosageSequence(sequence)
+            .isScheduled(true)
+            .administrationStarted(stageSlots.stream().anyMatch(s -> s.getMedicationAdministration() != null))
+            .allAttended(stageSlots.stream().noneMatch(s -> s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
+            .pendingSlotsAvailable(stageSlots.stream().anyMatch(s ->
+                s.getStartDateTime() != null &&
+                LocalDateTime.now().isBefore(s.getStartDateTime()) &&
+                s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
+            .notes(stageSlots.get(0).getNotes());
 
-                    if (!sortedDaySlots.isEmpty()) {
-                        if (sortedDaySlots.size() == 1 || sortedDaySlots.get(0).size() == sortedDaySlots.get(1).size()) {
-                            stageDayWise = sortedDaySlots.get(0).stream()
-                                .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
-                                .collect(Collectors.toList());
-                        } else {
-                            stageFirstDay = sortedDaySlots.get(0).stream()
-                                .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
-                                .collect(Collectors.toList());
-                            stageRemainingDay = sortedDaySlots.get(sortedDaySlots.size() - 1).stream()
-                                .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
-                                .collect(Collectors.toList());
-                            if (sortedDaySlots.size() > 2) {
-                                stageDayWise = sortedDaySlots.get(1).stream()
-                                    .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
-                                    .collect(Collectors.toList());
-                            }
-                        }
+        if (isStartTimeFrequency) {
+            builder.slotStartTime(stageSlots.stream()
+                .filter(s -> s.getStartDateTime() != null)
+                .min(Comparator.comparing(Slot::getStartDateTime))
+                .map(s -> DateTimeUtil.convertLocalDateTimeToUTCEpoc(s.getStartDateTime()))
+                .orElse(null));
+        } else {
+            populateDayWiseSlotTimes(stageSlots, builder);
+        }
+
+        return builder.build();
+    }
+
+    private void populateDayWiseSlotTimes(List<Slot> stageSlots, StageScheduleStatus.StageScheduleStatusBuilder builder) {
+        List<List<LocalDateTime>> sortedDaySlots = groupSlotsByDay(stageSlots);
+        if (sortedDaySlots.isEmpty()) return;
+
+        if (sortedDaySlots.size() == 1 || sortedDaySlots.get(0).size() == sortedDaySlots.get(1).size()) {
+            builder.dayWiseSlotsStartTime(toEpochList(sortedDaySlots.get(0)));
+        } else {
+            builder.firstDaySlotsStartTime(toEpochList(sortedDaySlots.get(0)));
+            builder.remainingDaySlotsStartTime(toEpochList(sortedDaySlots.get(sortedDaySlots.size() - 1)));
+            if (sortedDaySlots.size() > 2) {
+                builder.dayWiseSlotsStartTime(toEpochList(sortedDaySlots.get(1)));
+            }
+        }
+    }
+
+    private List<List<LocalDateTime>> groupSlotsByDay(List<Slot> stageSlots) {
+        TreeMap<LocalDate, List<LocalDateTime>> slotsByDate = stageSlots.stream()
+            .filter(s -> s.getStartDateTime() != null)
+            .collect(Collectors.groupingBy(
+                s -> s.getStartDateTime().toLocalDate(),
+                TreeMap::new,
+                Collectors.mapping(Slot::getStartDateTime, Collectors.toList())
+            ));
+        return new ArrayList<>(slotsByDate.values());
+    }
+
+    private List<Long> toEpochList(List<LocalDateTime> dateTimes) {
+        return dateTimes.stream()
+            .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+            .collect(Collectors.toList());
+    }
+
+    private int computeVdpNumberOfSlots(DrugOrder order, Integer sequence) {
+        try {
+            JsonNode dosages = MAPPER.readTree(order.getDosingInstructions());
+            for (JsonNode dosage : dosages) {
+                if (dosage.path("sequence").asInt() != sequence) continue;
+                for (JsonNode ext : dosage.path("extension")) {
+                    if ("isLoadingDose".equals(ext.path("url").asText()) && ext.path("valueBoolean").asBoolean(false)) {
+                        return 1;
                     }
                 }
+                double duration = dosage.path("timing").path("repeat").path("duration").asDouble(0);
+                String durationUnit = dosage.path("timing").path("repeat").path("durationUnit").asText("d");
+                double durationDays = normalizeFhirDurationToDays(duration, durationUnit);
+                String frequencyName = dosage.path("timing").path("code").path("text").asText(null);
+                double frequencyPerDay = getFrequencyPerDayByName(frequencyName);
+                return (int) Math.ceil(durationDays * frequencyPerDay);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to compute VDP numberOfSlots from FHIR for order {} sequence {}", order.getUuid(), sequence, e);
+        }
+        return 1;
+    }
 
-                return StageScheduleStatus.builder()
-                    .variableDosageSequence(sequence)
-                    .isScheduled(true)
-                    .administrationStarted(stageSlots.stream().anyMatch(s -> s.getMedicationAdministration() != null))
-                    .allAttended(stageSlots.stream().noneMatch(s -> s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
-                    .pendingSlotsAvailable(stageSlots.stream().anyMatch(s ->
-                        s.getStartDateTime() != null &&
-                        LocalDateTime.now().isBefore(s.getStartDateTime()) &&
-                        s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
-                    .notes(stageSlots.get(0).getNotes())
-                    .slotStartTime(stageSlotStartTime)
-                    .firstDaySlotsStartTime(stageFirstDay)
-                    .dayWiseSlotsStartTime(stageDayWise)
-                    .remainingDaySlotsStartTime(stageRemainingDay)
-                    .build();
-            })
-            .collect(Collectors.toList());
+    private double getFrequencyPerDayFromFhir(DrugOrder order, Integer sequence) {
+        try {
+            JsonNode dosages = MAPPER.readTree(order.getDosingInstructions());
+            for (JsonNode dosage : dosages) {
+                if (dosage.path("sequence").asInt() != sequence) continue;
+                String frequencyName = dosage.path("timing").path("code").path("text").asText(null);
+                return getFrequencyPerDayByName(frequencyName);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get frequencyPerDay from FHIR for order {} sequence {}", order.getUuid(), sequence, e);
+        }
+        return 1.0;
+    }
+
+    private double getFrequencyPerDayByName(String frequencyName) {
+        if (frequencyName == null) return 1.0;
+        return org.openmrs.api.context.Context.getOrderService().getOrderFrequencies(false)
+            .stream()
+            .filter(f -> frequencyName.equals(f.getConcept().getName().getName()))
+            .findFirst()
+            .map(f -> f.getFrequencyPerDay())
+            .orElse(1.0);
+    }
+
+    private double normalizeFhirDurationToDays(double duration, String durationUnit) {
+        switch (durationUnit != null ? durationUnit : "d") {
+            case "wk": return duration * 7;
+            case "mo": return duration * 30;
+            default:   return duration;
+        }
     }
 
     private boolean isStartTimeFrequencyForStage(Slot slot, Integer sequence) {
