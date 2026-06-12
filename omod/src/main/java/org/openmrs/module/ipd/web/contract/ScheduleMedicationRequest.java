@@ -31,6 +31,7 @@ public class ScheduleMedicationRequest {
     private List<Long> remainingDaySlotsStartTime;
     private MedicationFrequency medicationFrequency;
     private ServiceType serviceType;
+    private Integer variableDosageSequence;
 
     public enum MedicationFrequency {
         START_TIME_DURATION_FREQUENCY,

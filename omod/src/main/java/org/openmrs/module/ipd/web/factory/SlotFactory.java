@@ -38,7 +38,8 @@ public class SlotFactory {
 
     public List<Slot> createSlotsForMedicationFrom(Schedule savedSchedule, List<LocalDateTime> slotsStartTime,
                                                    Order drugOrder, MedicationAdministration medicationAdministration,
-                                                   Slot.SlotStatus status, ServiceType serviceType, String comments) {
+                                                   Slot.SlotStatus status, ServiceType serviceType, String comments,
+                                                   Integer variableDosageSequence) {
 
         return slotsStartTime.stream().map(slotStartTime -> {
             Slot slot = new Slot();
@@ -59,6 +60,7 @@ public class SlotFactory {
             slot.setStatus(status);
             slot.setMedicationAdministration(medicationAdministration);
             slot.setNotes(comments);
+            slot.setVariableDosageSequence(variableDosageSequence);
             return slot;
         }).collect(Collectors.toList());
     }

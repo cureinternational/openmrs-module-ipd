@@ -91,6 +91,9 @@ public class Slot extends BaseChangeableOpenmrsData {
 	@Column(name = "comments")
 	private String notes;
 
+	@Column(name = "variable_dosage_sequence")
+	private Integer variableDosageSequence;
+
 	public Boolean isStopped() {
 		return this.status !=null && this.status == SlotStatus.STOPPED;
 	}

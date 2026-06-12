@@ -1,6 +1,7 @@
 package org.openmrs.module.ipd.web.service.impl;
 
 import org.openmrs.*;
+import org.openmrs.api.APIException;
 import org.openmrs.api.ConceptService;
 import org.openmrs.api.OrderService;
 import org.openmrs.api.PatientService;
@@ -15,6 +16,7 @@ import org.openmrs.module.ipd.api.service.ReferenceService;
 import org.openmrs.module.ipd.api.service.ScheduleService;
 import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
+import org.openmrs.module.ipd.api.util.IPDConstants;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.ScheduleFactory;
 import org.openmrs.module.ipd.web.factory.SlotFactory;
@@ -73,12 +75,14 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
         DrugOrder order = (DrugOrder) orderService.getOrderByUuid(scheduleMedicationRequest.getOrderUuid());
         ServiceType serviceType = scheduleMedicationRequest.getServiceType() !=null ? scheduleMedicationRequest.getServiceType() : ServiceType.MEDICATION_REQUEST;
         if(serviceType.equals(ServiceType.MEDICATION_REQUEST)){
-            List<Slot> existingSlots = getMedicationSlots(patient.getUuid(),ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{order.getUuid()})));
-            if (existingSlots !=null && !existingSlots.isEmpty()) {
-                throw new RuntimeException("Slots already created for this drug order");
+            List<Slot> existingSlots = getMedicationSlots(patient.getUuid(), ServiceType.MEDICATION_REQUEST, new ArrayList<>(Arrays.asList(new String[]{order.getUuid()})));
+            boolean stageAlreadyScheduled = existingSlots != null && existingSlots.stream()
+                .anyMatch(s -> Objects.equals(s.getVariableDosageSequence(), scheduleMedicationRequest.getVariableDosageSequence()));
+            if (stageAlreadyScheduled) {
+                throw new APIException("Slots already created for this drug order");
             }
             List<LocalDateTime> slotsStartTime = slotTimeCreationService.createSlotsStartTimeFrom(scheduleMedicationRequest, order);
-            slotFactory.createSlotsForMedicationFrom(savedSchedule, slotsStartTime, order, null, SCHEDULED, ServiceType.MEDICATION_REQUEST, scheduleMedicationRequest.getComments())
+            slotFactory.createSlotsForMedicationFrom(savedSchedule, slotsStartTime, order, null, SCHEDULED, ServiceType.MEDICATION_REQUEST, scheduleMedicationRequest.getComments(), scheduleMedicationRequest.getVariableDosageSequence())
                     .forEach(slotService::saveSlot);
         }
         else if (serviceType.equals(ServiceType.AS_NEEDED_PLACEHOLDER)){
@@ -126,13 +130,15 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
 
     @Override
     public Schedule updateMedicationSchedule(ScheduleMedicationRequest scheduleMedicationRequest) {
-        voidExistingMedicationSlotsForOrder(scheduleMedicationRequest.getPatientUuid(),scheduleMedicationRequest.getOrderUuid(),"");
+        voidExistingMedicationSlotsForOrder(scheduleMedicationRequest.getPatientUuid(), scheduleMedicationRequest.getOrderUuid(), IPDConstants.EDIT_DRUG_CHART_VOID_REASON, scheduleMedicationRequest.getVariableDosageSequence());
         return saveMedicationSchedule(scheduleMedicationRequest);
     }
 
-    private void voidExistingMedicationSlotsForOrder(String patientUuid,String orderUuid,String voidReason){
-        List<Slot> existingSlots = getMedicationSlots(patientUuid,ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{orderUuid})));
-        existingSlots.stream().forEach(slot -> slotService.voidSlot(slot,voidReason));
+    private void voidExistingMedicationSlotsForOrder(String patientUuid, String orderUuid, String voidReason, Integer variableDosageSequence) {
+        List<Slot> existingSlots = getMedicationSlots(patientUuid, ServiceType.MEDICATION_REQUEST, new ArrayList<>(Arrays.asList(new String[]{orderUuid})));
+        existingSlots.stream()
+            .filter(s -> Objects.equals(s.getVariableDosageSequence(), variableDosageSequence))
+            .forEach(slot -> slotService.voidSlot(slot, voidReason));
     }
 
 

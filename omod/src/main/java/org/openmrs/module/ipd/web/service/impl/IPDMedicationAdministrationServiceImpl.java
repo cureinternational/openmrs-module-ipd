@@ -142,7 +142,7 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
         slotsStartTime.add(DateTimeUtil.convertEpocUTCToLocalTimeZone(medicationAdministrationRequest.getAdministeredDateTime()));
         slotFactory.createSlotsForMedicationFrom(schedule, slotsStartTime, null,
                         openmrsMedicationAdministration, Slot.SlotStatus.COMPLETED,
-                        ServiceType.EMERGENCY_MEDICATION_REQUEST, "")
+                        ServiceType.EMERGENCY_MEDICATION_REQUEST, "", null)
                 .forEach(slotService::saveSlot);
         return medicationAdministration;
     }
