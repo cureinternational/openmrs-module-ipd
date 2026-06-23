@@ -31,6 +31,8 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    private static final List<String> INTRADAY_DOSE_FIELDS = Arrays.asList("morningDose", "afternoonDose", "eveningDose", "nightDose");
+
     public List<LocalDateTime> createSlotsStartTimeFrom(ScheduleMedicationRequest request, DrugOrder order) {
         if (request.getSlotStartTimeAsLocaltime() != null && request.getMedicationFrequency() == START_TIME_DURATION_FREQUENCY) {
             return getSlotsStartTimeWithStartTimeDurationFrequency(request, order);
@@ -49,7 +51,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         if (order.getFrequency() == null && request.getVariableDosageSequence() != null) {
             numberOfSlotsStartTimeToBeCreated = computeVdpNumberOfSlots(order, request.getVariableDosageSequence());
         } else if (order.getDose() == null && order.getFrequency() == null) {
-            numberOfSlotsStartTimeToBeCreated = getIntradayFrequencyPerDay(order) * order.getDuration();
+            numberOfSlotsStartTimeToBeCreated = order.getDuration() != null
+                ? getIntradayFrequencyPerDay(order) * order.getDuration()
+                : getIntradayFrequencyPerDay(order);
         } else {
             numberOfSlotsStartTimeToBeCreated = (int) (Math.ceil(order.getQuantity() / order.getDose()));
         }
@@ -255,13 +259,13 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             if (!dosing.isObject()) {
                 return 1;
             }
-            int count = (int) Arrays.asList("morningDose", "afternoonDose", "eveningDose", "nightDose")
-                .stream()
+            int count = (int) INTRADAY_DOSE_FIELDS.stream()
                 .filter(field -> dosing.path(field).asDouble(0) != 0)
                 .count();
             return count > 0 ? count : 1;
         } catch (Exception e) {
-            log.warn("Failed to derive intraday frequency per day for order {}", order.getUuid(), e);
+            log.warn("Failed to derive intraday frequency per day for order {} with dosingInstructions [{}]",
+                order.getUuid(), order.getDosingInstructions(), e);
             return 1;
         }
     }

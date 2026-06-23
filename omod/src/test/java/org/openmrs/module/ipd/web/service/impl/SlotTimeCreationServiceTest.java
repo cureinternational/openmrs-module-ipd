@@ -321,6 +321,20 @@ public class SlotTimeCreationServiceTest {
         assertEquals(0, result.size());
     }
 
+    @Test
+    public void shouldNotThrow_ForIntradayOrder_WithNullDuration() {
+        DrugOrder order = buildIntradayDrugOrder(1, 10.0, 0.0, 20.0, 0.0);
+        order.setDuration(null);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(futureEpochList(2))
+                .build();
+
+        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(2, result.size());
+    }
+
     // -----------------------------------------------------------------------
     // getIntradayFrequencyPerDay — fallback behaviour (via slot count)
     // -----------------------------------------------------------------------
