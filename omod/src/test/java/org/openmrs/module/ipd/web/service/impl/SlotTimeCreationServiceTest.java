@@ -10,19 +10,22 @@ import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.model.StageScheduleStatus;
 
+import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-
-import static org.junit.Assert.assertEquals;
 
 @RunWith(MockitoJUnitRunner.class)
 public class SlotTimeCreationServiceTest {
@@ -64,6 +67,24 @@ public class SlotTimeCreationServiceTest {
         order.setQuantity(quantity);
         order.setDose(dose);
         return order;
+    }
+
+    private DrugOrder buildIntradayDrugOrder(int duration, double morning, double afternoon, double evening, double night) {
+        DrugOrder order = new DrugOrder();
+        order.setDuration(duration);
+        order.setQuantity((morning + afternoon + evening + night) * duration);
+        order.setDosingInstructions(String.format(
+            "{\"morningDose\":%s,\"afternoonDose\":%s,\"eveningDose\":%s,\"nightDose\":%s}",
+            morning, afternoon, evening, night));
+        return order;
+    }
+
+    private Slot buildIntradaySlot(DrugOrder order, LocalDateTime startDateTime) {
+        Slot slot = new Slot();
+        slot.setOrder(order);
+        slot.setStartDateTime(startDateTime);
+        slot.setStatus(Slot.SlotStatus.SCHEDULED);
+        return slot;
     }
 
     // -----------------------------------------------------------------------
@@ -236,5 +257,184 @@ public class SlotTimeCreationServiceTest {
         List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
 
         assertFalse(result.get(0).getAllAttended());
+    }
+
+    // -----------------------------------------------------------------------
+    // Intraday slot creation — createSlotsStartTimeFrom
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void shouldCreateCorrectSlots_ForIntraday2xDay_1DayDuration_NoPartialFirstDay() {
+        DrugOrder order = buildIntradayDrugOrder(1, 10.0, 0.0, 20.0, 0.0);
+        List<Long> dayWise = futureEpochList(2);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .build();
+
+        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(2, result.size());
+    }
+
+    @Test
+    public void shouldCreateCorrectSlots_ForIntraday3xDay_3DayDuration_NoPartialFirstDay() {
+        DrugOrder order = buildIntradayDrugOrder(3, 5.0, 5.0, 5.0, 0.0);
+        List<Long> dayWise = futureEpochList(3);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .build();
+
+        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(9, result.size());
+    }
+
+    @Test
+    public void shouldCreateCorrectSlots_ForIntraday4xDay_2DayDuration_WithPartialFirstDay() {
+        DrugOrder order = buildIntradayDrugOrder(2, 62.5, 25.0, 37.5, 10.0);
+        List<Long> firstDay = futureEpochList(2);
+        List<Long> dayWise = futureEpochList(4);
+        List<Long> remaining = futureEpochList(2);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .firstDaySlotsStartTime(firstDay)
+                .dayWiseSlotsStartTime(dayWise)
+                .remainingDaySlotsStartTime(remaining)
+                .build();
+
+        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(8, result.size());
+    }
+
+    @Test
+    public void shouldReturnEmpty_ForIntradayOrder_WhenNoSlotTimesProvided() {
+        DrugOrder order = buildIntradayDrugOrder(3, 10.0, 0.0, 20.0, 0.0);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .build();
+
+        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(0, result.size());
+    }
+
+    // -----------------------------------------------------------------------
+    // getIntradayFrequencyPerDay — fallback behaviour (via slot count)
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void shouldFallbackTo1Slot_ForIntradayOrder_WithNullDosingInstructions() {
+        DrugOrder order = new DrugOrder();
+        order.setDuration(1);
+        order.setQuantity(10.0);
+        List<Long> dayWise = futureEpochList(1);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .build();
+
+        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(1, result.size());
+    }
+
+    @Test
+    public void shouldFallbackTo1Slot_ForIntradayOrder_WithFhirArrayDosingInstructions() {
+        DrugOrder order = new DrugOrder();
+        order.setDuration(1);
+        order.setQuantity(10.0);
+        order.setDosingInstructions("[{\"sequence\":1}]");
+        List<Long> dayWise = futureEpochList(1);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .build();
+
+        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(1, result.size());
+    }
+
+    // -----------------------------------------------------------------------
+    // getDrugOrderScheduledTime — edit mode reconstruction for intraday
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void shouldSetDayWiseSlotsStartTime_ForIntradayOrder_WithFullSchedule() {
+        DrugOrder order = buildIntradayDrugOrder(2, 10.0, 0.0, 20.0, 0.0);
+        LocalDate day1 = LocalDate.of(2026, 6, 1);
+        LocalDate day2 = LocalDate.of(2026, 6, 2);
+
+        List<Slot> slots = Arrays.asList(
+                buildIntradaySlot(order, day1.atTime(8, 0)),
+                buildIntradaySlot(order, day1.atTime(20, 0)),
+                buildIntradaySlot(order, day2.atTime(8, 0)),
+                buildIntradaySlot(order, day2.atTime(20, 0))
+        );
+
+        Map<DrugOrder, List<Slot>> slotsByOrder = new HashMap<>();
+        slotsByOrder.put(order, slots);
+
+        HashMap<String, DrugOrderSchedule> result = slotTimeCreationService.getDrugOrderScheduledTime(slotsByOrder);
+        DrugOrderSchedule schedule = result.get(order.getUuid());
+
+        assertNotNull("dayWiseSlotsStartTime should be set for full intraday schedule", schedule.getDayWiseSlotsStartTime());
+        assertEquals(2, schedule.getDayWiseSlotsStartTime().size());
+        assertNull("firstDaySlotsStartTime should be null when first day is complete", schedule.getFirstDaySlotsStartTime());
+    }
+
+    @Test
+    public void shouldSetFirstDayAndRemainingSlots_ForIntradayOrder_WithPartialFirstDay() {
+        DrugOrder order = buildIntradayDrugOrder(3, 10.0, 0.0, 20.0, 0.0);
+        LocalDate day1 = LocalDate.of(2026, 6, 1);
+        LocalDate day2 = LocalDate.of(2026, 6, 2);
+        LocalDate day3 = LocalDate.of(2026, 6, 3);
+        LocalDate day4 = LocalDate.of(2026, 6, 4);
+
+        List<Slot> slots = Arrays.asList(
+                buildIntradaySlot(order, day1.atTime(20, 0)),
+                buildIntradaySlot(order, day2.atTime(8, 0)),
+                buildIntradaySlot(order, day2.atTime(20, 0)),
+                buildIntradaySlot(order, day3.atTime(8, 0)),
+                buildIntradaySlot(order, day3.atTime(20, 0)),
+                buildIntradaySlot(order, day4.atTime(8, 0))
+        );
+
+        Map<DrugOrder, List<Slot>> slotsByOrder = new HashMap<>();
+        slotsByOrder.put(order, slots);
+
+        HashMap<String, DrugOrderSchedule> result = slotTimeCreationService.getDrugOrderScheduledTime(slotsByOrder);
+        DrugOrderSchedule schedule = result.get(order.getUuid());
+
+        assertNotNull("firstDaySlotsStartTime should be set for partial first day", schedule.getFirstDaySlotsStartTime());
+        assertEquals(1, schedule.getFirstDaySlotsStartTime().size());
+        assertNotNull("dayWiseSlotsStartTime should be set from second day", schedule.getDayWiseSlotsStartTime());
+        assertEquals(2, schedule.getDayWiseSlotsStartTime().size());
+        assertNotNull("remainingDaySlotsStartTime should hold carry-over slot", schedule.getRemainingDaySlotsStartTime());
+        assertEquals(1, schedule.getRemainingDaySlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldNotSetSlotStartTime_ForIntradayOrder_EvenThoughFrequencyIsNull() {
+        DrugOrder order = buildIntradayDrugOrder(1, 10.0, 0.0, 20.0, 0.0);
+        LocalDate day1 = LocalDate.of(2026, 6, 1);
+
+        List<Slot> slots = Arrays.asList(
+                buildIntradaySlot(order, day1.atTime(8, 0)),
+                buildIntradaySlot(order, day1.atTime(20, 0))
+        );
+
+        Map<DrugOrder, List<Slot>> slotsByOrder = new HashMap<>();
+        slotsByOrder.put(order, slots);
+
+        HashMap<String, DrugOrderSchedule> result = slotTimeCreationService.getDrugOrderScheduledTime(slotsByOrder);
+        DrugOrderSchedule schedule = result.get(order.getUuid());
+
+        assertNull("slotStartTime should NOT be set for intraday orders even though frequency is null",
+                schedule.getSlotStartTime());
+        assertNotNull("dayWiseSlotsStartTime should be set instead", schedule.getDayWiseSlotsStartTime());
     }
 }
