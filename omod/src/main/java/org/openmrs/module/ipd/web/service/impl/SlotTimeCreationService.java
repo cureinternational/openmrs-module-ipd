@@ -129,7 +129,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         HashMap<String, DrugOrderSchedule> drugOrderScheduleHash= new HashMap<>();
         for (DrugOrder drugOrder : slotsByOrder.keySet()) {
             DrugOrderSchedule drugOrderSchedule = new DrugOrderSchedule();
-            boolean isIntradayOrder = drugOrder.getDose() == null && drugOrder.getFrequency() == null;
+            boolean isIntradayOrder = drugOrder.getDose() == null
+                    && drugOrder.getFrequency() == null
+                    && hasIntradayDoseFields(drugOrder.getDosingInstructions());
             if (drugOrder.getAsNeeded() || (drugOrder.getFrequency() == null && !isIntradayOrder) || drugOrder.getDuration() == null || drugOrder.getQuantity() == 0.0) {
                 drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slotsByOrder.get(drugOrder).get(0).getStartDateTime()));
             }
@@ -249,14 +251,26 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             .collect(Collectors.toList());
     }
 
+    private boolean hasIntradayDoseFields(String dosingInstructions) {
+        if (dosingInstructions == null || dosingInstructions.trim().isEmpty()) return false;
+        try {
+            JsonNode dosing = MAPPER.readTree(dosingInstructions);
+            return dosing.isObject() && INTRADAY_DOSE_FIELDS.stream().anyMatch(dosing::has);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private int getIntradayFrequencyPerDay(DrugOrder order) {
         try {
             String dosingInstructions = order.getDosingInstructions();
             if (dosingInstructions == null || dosingInstructions.trim().isEmpty()) {
+                log.warn("Intraday order {} has empty dosingInstructions; falling back to 1 slot/day", order.getUuid());
                 return 1;
             }
             JsonNode dosing = MAPPER.readTree(dosingInstructions);
             if (!dosing.isObject()) {
+                log.warn("Intraday order {} has non-object dosingInstructions; falling back to 1 slot/day", order.getUuid());
                 return 1;
             }
             int count = (int) INTRADAY_DOSE_FIELDS.stream()
