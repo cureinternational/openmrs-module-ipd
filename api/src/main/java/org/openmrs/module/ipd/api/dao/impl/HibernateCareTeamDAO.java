@@ -6,10 +6,13 @@ import org.openmrs.Visit;
 import org.openmrs.api.db.DAOException;
 import org.openmrs.module.ipd.api.dao.CareTeamDAO;
 import org.openmrs.module.ipd.api.model.CareTeam;
+import org.openmrs.module.ipd.api.model.CareTeamParticipant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
+import java.util.Date;
+import java.util.List;
 
 public class HibernateCareTeamDAO implements CareTeamDAO {
 
@@ -35,5 +38,22 @@ public class HibernateCareTeamDAO implements CareTeamDAO {
         query.setParameter("visit", visit);
 
         return (CareTeam) query.uniqueResult();
+    }
+
+    @Override
+    public List<CareTeamParticipant> getActiveParticipants(Date asOf) throws DAOException {
+        // Find participants still actively booked (endTime in future or null)
+        // Note: Scheduler is configured to run 1 minute before shift end to ensure participants are still active
+        Query query = sessionFactory.getCurrentSession()
+                .createQuery("FROM CareTeamParticipant ctp WHERE ctp.voided = false " +
+                        "AND (ctp.endTime IS NULL OR ctp.endTime > :asOf)");
+        query.setParameter("asOf", asOf);
+        return query.list();
+    }
+
+    @Override
+    public CareTeamParticipant saveParticipant(CareTeamParticipant participant) throws DAOException {
+        sessionFactory.getCurrentSession().saveOrUpdate(participant);
+        return participant;
     }
 }

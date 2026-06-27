@@ -479,4 +479,24 @@
         </addColumn>
     </changeSet>
 
+    <!-- Single self-rescheduling task for unbooking patients at shift end -->
+    <changeSet id="unbookmark-patients-single-task-20250626" author="Bahmni">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM scheduler_task_config WHERE name = 'Unbookmark Patients At Shift End';
+            </sqlCheck>
+        </preConditions>
+        <sql>
+            INSERT INTO scheduler_task_config(name, description, schedulable_class,
+                start_time, start_time_pattern, repeat_interval, start_on_startup,
+                started, created_by, date_created, uuid)
+            VALUES (
+                'Unbookmark Patients At Shift End',
+                'Unbookmarks all patients at shift end. Reads times from Global Property ipd.shiftDetails. Self-reschedules.',
+                'org.openmrs.module.ipd.api.scheduler.tasks.UnbookmarkPatientsAtShiftEnd',
+                NOW(), 'MM/dd/yyyy HH:mm:ss', 0, 1, 1, 1, NOW(), UUID()
+            );
+        </sql>
+    </changeSet>
+
 </databaseChangeLog>
