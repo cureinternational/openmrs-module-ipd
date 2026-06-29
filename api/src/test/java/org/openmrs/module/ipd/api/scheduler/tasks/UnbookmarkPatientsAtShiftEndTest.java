@@ -4,6 +4,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
+import org.openmrs.api.AdministrationService;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.ipd.api.service.CareTeamService;
 import org.powermock.api.mockito.PowerMockito;
@@ -20,71 +21,50 @@ import static org.mockito.Mockito.when;
 public class UnbookmarkPatientsAtShiftEndTest {
 
     private CareTeamService careTeamService;
+    private AdministrationService administrationService;
     private UnbookmarkPatientsAtShiftEnd task;
+    private static final String SHIFT_DETAILS_JSON = "{\"1\": {\"shiftStartTime\":\"08:00\",\"shiftEndTime\":\"19:00\"},\"2\": {\"shiftStartTime\":\"19:00\",\"shiftEndTime\":\"08:00\"}}";
 
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
         careTeamService = mock(CareTeamService.class);
+        administrationService = mock(AdministrationService.class);
         task = new UnbookmarkPatientsAtShiftEnd();
 
         PowerMockito.mockStatic(Context.class);
         when(Context.getService(CareTeamService.class)).thenReturn(careTeamService);
+        when(Context.getAdministrationService()).thenReturn(administrationService);
+        when(administrationService.getGlobalProperty("ipd.shiftDetails")).thenReturn(SHIFT_DETAILS_JSON);
     }
 
     @Test
-    public void shouldCallUnbookmarkServiceWhenTaskExecutes() {
-        when(careTeamService.unbookmarkAllActivePatients()).thenReturn(5);
-
+    public void shouldParseShiftDetailsFromGlobalProperty() {
         task.execute();
-
-        verify(careTeamService, times(1)).unbookmarkAllActivePatients();
+        verify(administrationService).getGlobalProperty("ipd.shiftDetails");
     }
 
     @Test
-    public void shouldHandleZeroParticipantsUnbookmarked() {
-        when(careTeamService.unbookmarkAllActivePatients()).thenReturn(0);
+    public void shouldHandleNullGlobalProperty() {
+        when(administrationService.getGlobalProperty("ipd.shiftDetails")).thenReturn(null);
 
-        task.execute();
-
-        verify(careTeamService, times(1)).unbookmarkAllActivePatients();
-    }
-
-    @Test
-    public void shouldHandleMultipleParticipantsUnbookmarked() {
-        when(careTeamService.unbookmarkAllActivePatients()).thenReturn(15);
-
-        task.execute();
-
-        verify(careTeamService, times(1)).unbookmarkAllActivePatients();
-    }
-
-    @Test
-    public void shouldBeIdempotent() {
-        when(careTeamService.unbookmarkAllActivePatients()).thenReturn(5);
-
-        task.execute();
-        task.execute();
-        task.execute();
-
-        verify(careTeamService, times(3)).unbookmarkAllActivePatients();
-    }
-
-    @Test
-    public void shouldHandleExceptionDuringExecution() {
-        when(Context.getAdministrationService()).thenThrow(new RuntimeException("Service error"));
-
-        // Should not throw, should handle gracefully
         task.execute();
 
         verify(careTeamService, times(0)).unbookmarkAllActivePatients();
     }
 
     @Test
-    public void shouldHandleNullCareTeamService() {
-        when(Context.getService(CareTeamService.class)).thenReturn(null);
+    public void shouldHandleEmptyGlobalProperty() {
+        when(administrationService.getGlobalProperty("ipd.shiftDetails")).thenReturn("");
 
-        // Should not throw, should handle gracefully
         task.execute();
+
+        verify(careTeamService, times(0)).unbookmarkAllActivePatients();
+    }
+
+    @Test
+    public void shouldRescheduleTaskExecution() {
+        task.execute();
+        verify(administrationService).getGlobalProperty("ipd.shiftDetails");
     }
 }

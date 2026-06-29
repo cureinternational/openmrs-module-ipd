@@ -42,8 +42,6 @@ public class HibernateCareTeamDAO implements CareTeamDAO {
 
     @Override
     public List<CareTeamParticipant> getActiveParticipants(Date asOf) throws DAOException {
-        // Find participants still actively booked (endTime in future or null)
-        // Note: Scheduler is configured to run 1 minute before shift end to ensure participants are still active
         Query query = sessionFactory.getCurrentSession()
                 .createQuery("FROM CareTeamParticipant ctp WHERE ctp.voided = false " +
                         "AND (ctp.endTime IS NULL OR ctp.endTime > :asOf)");
