@@ -13,25 +13,20 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
 
     private static final String SHIFT_DETAILS_GP = "ipd.shiftDetails";
     private static final int TOLERANCE_MINUTES = 1;
-    private static final boolean TEST_MODE = true; // Set to true to test unbooking immediately (only for testing)
 
     @Override
     public void execute() {
         try {
-            // Fetch from Global Property - Liquibase migration ensures it exists
             String shiftDetailsJson = Context.getAdministrationService()
                 .getGlobalProperty(SHIFT_DETAILS_GP);
 
-            // If property doesn't exist, skip execution (fallback relies on Liquibase to create it)
             if (shiftDetailsJson == null || shiftDetailsJson.isEmpty()) {
                 return;
             }
 
             List<String> shiftEndTimes = parseShiftEndTimes(shiftDetailsJson);
 
-            // Safety check: Only unbookmark if we're actually at/near shift end time
-            // This prevents accidental unbooking at startup before scheduler reschedules the task
-            if (TEST_MODE || isShiftEndTime(shiftEndTimes)) {
+            if (isShiftEndTime(shiftEndTimes)) {
                 CareTeamService careTeamService = Context.getService(CareTeamService.class);
                 careTeamService.unbookmarkAllActivePatients();
             }
@@ -67,8 +62,6 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
     private List<String> parseShiftEndTimes(String json) {
         List<String> times = new ArrayList<>();
         try {
-            // Simple string parsing for JSON object of shift objects
-            // Expected format: {"1": {"shiftStartTime":"08:00","shiftEndTime":"19:00"},"2": {...}}
             int index = 0;
             while (index < json.length()) {
                 int startIdx = json.indexOf("\"shiftEndTime\":", index);
