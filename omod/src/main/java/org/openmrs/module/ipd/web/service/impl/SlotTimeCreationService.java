@@ -31,6 +31,8 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    private static final List<String> INTRADAY_DOSE_FIELDS = Arrays.asList("morningDose", "afternoonDose", "eveningDose", "nightDose");
+
     public List<LocalDateTime> createSlotsStartTimeFrom(ScheduleMedicationRequest request, DrugOrder order) {
         if (request.getSlotStartTimeAsLocaltime() != null && request.getMedicationFrequency() == START_TIME_DURATION_FREQUENCY) {
             return getSlotsStartTimeWithStartTimeDurationFrequency(request, order);
@@ -45,9 +47,16 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
     }
 
     private List<LocalDateTime> getSlotsStartTimeWithFixedScheduleFrequency(ScheduleMedicationRequest request, DrugOrder order) {
-        int numberOfSlotsStartTimeToBeCreated = order.getFrequency() == null && request.getVariableDosageSequence() != null
-            ? computeVdpNumberOfSlots(order, request.getVariableDosageSequence())
-            : (int) (Math.ceil(order.getQuantity() / order.getDose()));
+        int numberOfSlotsStartTimeToBeCreated;
+        if (order.getFrequency() == null && request.getVariableDosageSequence() != null) {
+            numberOfSlotsStartTimeToBeCreated = computeVdpNumberOfSlots(order, request.getVariableDosageSequence());
+        } else if (order.getDose() == null && order.getFrequency() == null) {
+            numberOfSlotsStartTimeToBeCreated = order.getDuration() != null
+                ? getIntradayFrequencyPerDay(order) * order.getDuration()
+                : getIntradayFrequencyPerDay(order);
+        } else {
+            numberOfSlotsStartTimeToBeCreated = (int) (Math.ceil(order.getQuantity() / order.getDose()));
+        }
 
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
         if (!CollectionUtils.isEmpty(request.getFirstDaySlotsStartTimeAsLocalTime())) {
@@ -120,12 +129,13 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         HashMap<String, DrugOrderSchedule> drugOrderScheduleHash= new HashMap<>();
         for (DrugOrder drugOrder : slotsByOrder.keySet()) {
             DrugOrderSchedule drugOrderSchedule = new DrugOrderSchedule();
-            if (drugOrder.getAsNeeded() || drugOrder.getFrequency() == null || drugOrder.getDuration() == null || drugOrder.getQuantity() == 0.0) {
+            boolean isIntradayOrder = drugOrder.getDose() == null
+                    && drugOrder.getFrequency() == null
+                    && hasIntradayDoseFields(drugOrder.getDosingInstructions());
+            if (drugOrder.getAsNeeded() || (drugOrder.getFrequency() == null && !isIntradayOrder) || drugOrder.getDuration() == null || drugOrder.getQuantity() == 0.0) {
                 drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slotsByOrder.get(drugOrder).get(0).getStartDateTime()));
             }
             else {
-                Double frequencyPerDay = drugOrder.getFrequency().getFrequencyPerDay();
-                String frequency = drugOrder.getFrequency().getName();
                 Map<LocalDate, List<LocalDateTime>> groupedByDateAndEpoch = slotsByOrder.get(drugOrder).stream()
                         .collect(Collectors.groupingBy(
                                 obj -> obj.getStartDateTime().toLocalDate(),
@@ -136,9 +146,14 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                         ));
 
                 List<List<LocalDateTime>> sortedList = groupedByDateAndEpoch.entrySet().stream()
-                        .sorted(Map.Entry.comparingByKey()) // Sort by LocalDate in ascending order
-                        .map(Map.Entry::getValue) // Get the list of Longs for each entry
-                        .collect(Collectors.toList()); // Collect the list of lists into a single ArrayList
+                        .sorted(Map.Entry.comparingByKey())
+                        .map(Map.Entry::getValue)
+                        .collect(Collectors.toList());
+
+                Double frequencyPerDay = isIntradayOrder
+                    ? (double) getIntradayFrequencyPerDay(drugOrder)
+                    : drugOrder.getFrequency().getFrequencyPerDay();
+                String frequency = isIntradayOrder ? null : drugOrder.getFrequency().getName();
 
                 if (START_TIME_FREQUENCIES.contains(frequency)) {
                     drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(sortedList.get(0).get(0)));
@@ -234,6 +249,39 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         return dateTimes.stream()
             .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
             .collect(Collectors.toList());
+    }
+
+    private boolean hasIntradayDoseFields(String dosingInstructions) {
+        if (dosingInstructions == null || dosingInstructions.trim().isEmpty()) return false;
+        try {
+            JsonNode dosing = MAPPER.readTree(dosingInstructions);
+            return dosing.isObject() && INTRADAY_DOSE_FIELDS.stream().anyMatch(dosing::has);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private int getIntradayFrequencyPerDay(DrugOrder order) {
+        try {
+            String dosingInstructions = order.getDosingInstructions();
+            if (dosingInstructions == null || dosingInstructions.trim().isEmpty()) {
+                log.warn("Intraday order {} has empty dosingInstructions; falling back to 1 slot/day", order.getUuid());
+                return 1;
+            }
+            JsonNode dosing = MAPPER.readTree(dosingInstructions);
+            if (!dosing.isObject()) {
+                log.warn("Intraday order {} has non-object dosingInstructions; falling back to 1 slot/day", order.getUuid());
+                return 1;
+            }
+            int count = (int) INTRADAY_DOSE_FIELDS.stream()
+                .filter(field -> dosing.path(field).asDouble(0) != 0)
+                .count();
+            return count > 0 ? count : 1;
+        } catch (Exception e) {
+            log.warn("Failed to derive intraday frequency per day for order {} with dosingInstructions [{}]",
+                order.getUuid(), order.getDosingInstructions(), e);
+            return 1;
+        }
     }
 
     private int computeVdpNumberOfSlots(DrugOrder order, Integer sequence) {
