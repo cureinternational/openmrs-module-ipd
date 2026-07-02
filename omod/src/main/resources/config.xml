@@ -23,6 +23,11 @@
 		<defaultValue>true</defaultValue>
 		<description>Feature toggle to decide whether to stop slots associated when drug order is stopped</description>
 	</globalProperty>
+	<globalProperty>
+		<property>ipd.shiftDetails</property>
+		<defaultValue></defaultValue>
+		<description>Shift timings configuration in JSON object format. Used by UnbookmarkPatientsAtShiftEnd scheduler and frontend to manage patient bookings. Format: {"1": {"shiftStartTime":"08:00","shiftEndTime":"19:00"},"2": {"shiftStartTime":"19:00","shiftEndTime":"08:00"}}. Configure per region/deployment.</description>
+	</globalProperty>
 
 	<privilege>
 		<name>Edit Medication Tasks</name>
