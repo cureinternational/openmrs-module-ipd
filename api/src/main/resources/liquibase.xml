@@ -494,7 +494,7 @@
                 'Unbookmark Patients At Shift End',
                 'Unbookmarks all patients at shift end. Reads times from Global Property ipd.shiftDetails. Self-reschedules.',
                 'org.openmrs.module.ipd.api.scheduler.tasks.UnbookmarkPatientsAtShiftEnd',
-                NOW(), 'MM/dd/yyyy HH:mm:ss', 0, 1, 1, 1, NOW(), UUID()
+                DATE_ADD(NOW(), INTERVAL 5 MINUTE), 'MM/dd/yyyy HH:mm:ss', 0, 1, 1, 1, NOW(), UUID()
             );
         </sql>
     </changeSet>

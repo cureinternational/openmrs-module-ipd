@@ -9,10 +9,20 @@ import org.openmrs.module.ipd.api.service.CareTeamService;
 import org.openmrs.scheduler.TaskDefinition;
 import org.openmrs.scheduler.tasks.AbstractTask;
 
+/**
+ * Self-rescheduling scheduler task that unbookmarks all active patients at shift end times.
+ *
+ * Uses OpenMRS scheduler's repeatInterval=0 pattern for self-rescheduling:
+ * - Task fires at calculated startTime (1 minute before shift end)
+ * - After execution, calculates next shift end time and reschedules itself
+ * - repeatInterval=0 ensures the task doesn't auto-repeat; manual rescheduling via setStartTime()
+ *
+ * Shift times are configured via Global Property 'ipd.shiftDetails' in JSON format.
+ */
 public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
 
     private static final String SHIFT_DETAILS_GP = "ipd.shiftDetails";
-    private static final int TOLERANCE_MINUTES = 1;
+    private static final int EXECUTION_BUFFER_MINUTES = 1;
 
     @Override
     public void execute() {
@@ -26,6 +36,10 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
 
             List<String> shiftEndTimes = parseShiftEndTimes(shiftDetailsJson);
 
+            if (shiftEndTimes.isEmpty()) {
+                return;
+            }
+
             if (isShiftEndTime(shiftEndTimes)) {
                 CareTeamService careTeamService = Context.getService(CareTeamService.class);
                 careTeamService.unbookmarkAllActivePatients();
@@ -33,24 +47,32 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
 
             scheduleNextExecution(shiftEndTimes);
         } catch (Exception e) {
-            // Silently handle all exceptions to prevent breaking OpenMRS
+            // Silently handle exceptions
         }
+    }
+
+    private int timeStringToMinutes(String timeStr) {
+        try {
+            String[] parts = timeStr.split(":");
+            if (parts.length == 2) {
+                return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
+            }
+        } catch (NumberFormatException e) {
+            // Invalid time format
+        }
+        return -1;
     }
 
     private boolean isShiftEndTime(List<String> times) {
         try {
             Calendar now = Calendar.getInstance();
-            int nowTotal = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+            int nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
             for (String t : times) {
-                try {
-                    String[] parts = t.split(":");
-                    if (parts.length == 2) {
-                        int total = Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
-                        // Check if we're within 1 minute of shift end time (safety guard against accidental unbooking)
-                        if (Math.abs(total - nowTotal) <= TOLERANCE_MINUTES) return true;
+                int shiftEndMinutes = timeStringToMinutes(t);
+                if (shiftEndMinutes != -1) {
+                    if (Math.abs(shiftEndMinutes - nowMinutes) <= EXECUTION_BUFFER_MINUTES) {
+                        return true;
                     }
-                } catch (NumberFormatException e) {
-                    // Skip invalid time format
                 }
             }
         } catch (Exception e) {
@@ -77,39 +99,45 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
                 }
             }
         } catch (Exception e) {
-            // Fallback to default ET times
-        }
-        if (times.isEmpty()) {
-            times.add("19:00");
-            times.add("08:00");
+            // Error parsing shift details
         }
         return times;
     }
 
-private void scheduleNextExecution(List<String> times) {
+    private Date getExecutionTime(String shiftEndTime) {
+        int shiftEndMinutes = timeStringToMinutes(shiftEndTime);
+        if (shiftEndMinutes == -1) {
+            return null;
+        }
+        try {
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.HOUR_OF_DAY, shiftEndMinutes / 60);
+            cal.set(Calendar.MINUTE, shiftEndMinutes % 60);
+            cal.set(Calendar.SECOND, 0);
+            cal.set(Calendar.MILLISECOND, 0);
+            cal.add(Calendar.MINUTE, -EXECUTION_BUFFER_MINUTES);
+            return cal.getTime();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void scheduleNextExecution(List<String> times) {
         try {
             Date now = new Date();
             Date earliest = null;
-            for (String t : times) {
-                try {
-                    String[] parts = t.split(":");
-                    if (parts.length == 2) {
+            for (String shiftEndTime : times) {
+                Date executionTime = getExecutionTime(shiftEndTime);
+                if (executionTime != null) {
+                    if (!executionTime.after(now)) {
                         Calendar cal = Calendar.getInstance();
-                        cal.set(Calendar.HOUR_OF_DAY, Integer.parseInt(parts[0]));
-                        cal.set(Calendar.MINUTE, Integer.parseInt(parts[1]));
-                        cal.set(Calendar.SECOND, 0);
-                        cal.set(Calendar.MILLISECOND, 0);
-                        // Schedule to run 1 minute BEFORE shift end time to ensure participants are still active
-                        cal.add(Calendar.MINUTE, -1);
-                        Date candidate = cal.getTime();
-                        if (!candidate.after(now)) {
-                            cal.add(Calendar.DAY_OF_MONTH, 1);
-                            candidate = cal.getTime();
-                        }
-                        if (earliest == null || candidate.before(earliest)) earliest = candidate;
+                        cal.setTime(executionTime);
+                        cal.add(Calendar.DAY_OF_MONTH, 1);
+                        executionTime = cal.getTime();
                     }
-                } catch (NumberFormatException e) {
-                    // Skip invalid time format
+                    if (earliest == null || executionTime.before(earliest)) {
+                        earliest = executionTime;
+                    }
                 }
             }
             if (earliest != null) {
@@ -121,7 +149,7 @@ private void scheduleNextExecution(List<String> times) {
                 }
             }
         } catch (Exception e) {
-            // Silently handle
+            // Silently handle exceptions
         }
     }
 }
