@@ -11,4 +11,6 @@ public interface CareTeamService extends OpenmrsService {
 
     CareTeam getCareTeamByVisit(Visit visit) throws APIException;
 
+    int unbookmarkAllActivePatients() throws APIException;
+
 }

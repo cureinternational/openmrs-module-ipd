@@ -1,11 +1,14 @@
 package org.openmrs.module.ipd.api.service.impl;
 
 
+import org.openmrs.User;
 import org.openmrs.Visit;
 import org.openmrs.api.APIException;
+import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.ipd.api.dao.CareTeamDAO;
 import org.openmrs.module.ipd.api.model.CareTeam;
+import org.openmrs.module.ipd.api.model.CareTeamParticipant;
 import org.openmrs.module.ipd.api.model.Schedule;
 import org.openmrs.module.ipd.api.service.CareTeamService;
 import org.slf4j.Logger;
@@ -13,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Date;
+import java.util.List;
 
 @Transactional
 public class CareTeamServiceImpl extends BaseOpenmrsService implements CareTeamService {
@@ -33,5 +38,20 @@ public class CareTeamServiceImpl extends BaseOpenmrsService implements CareTeamS
     @Override
     public CareTeam getCareTeamByVisit(Visit visit) throws APIException {
         return careTeamDAO.getCareTeamByVisit(visit);
+    }
+
+    @Override
+    public int unbookmarkAllActivePatients() throws APIException {
+        Date now = new Date();
+        List<CareTeamParticipant> active = careTeamDAO.getActiveParticipants(now);
+        User currentUser = Context.getAuthenticatedUser();
+        for (CareTeamParticipant participant : active) {
+            participant.setVoided(true);
+            participant.setVoidedBy(currentUser);
+            participant.setDateVoided(now);
+            participant.setVoidReason("Automatically unbookmarked at shift end");
+            careTeamDAO.saveParticipant(participant);
+        }
+        return active.size();
     }
 }
