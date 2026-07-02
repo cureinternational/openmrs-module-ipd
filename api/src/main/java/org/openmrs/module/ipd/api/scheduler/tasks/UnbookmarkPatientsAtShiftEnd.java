@@ -1,5 +1,7 @@
 package org.openmrs.module.ipd.api.scheduler.tasks;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -8,6 +10,8 @@ import org.openmrs.api.context.Context;
 import org.openmrs.module.ipd.api.service.CareTeamService;
 import org.openmrs.scheduler.TaskDefinition;
 import org.openmrs.scheduler.tasks.AbstractTask;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Self-rescheduling scheduler task that unbookmarks all active patients at shift end times.
@@ -21,6 +25,8 @@ import org.openmrs.scheduler.tasks.AbstractTask;
  */
 public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
 
+    private static final Logger logger = LoggerFactory.getLogger(UnbookmarkPatientsAtShiftEnd.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String SHIFT_DETAILS_GP = "ipd.shiftDetails";
     private static final int EXECUTION_BUFFER_MINUTES = 1;
 
@@ -82,26 +88,32 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
     }
 
     private List<String> parseShiftEndTimes(String json) {
-        List<String> times = new ArrayList<>();
         try {
-            int index = 0;
-            while (index < json.length()) {
-                int startIdx = json.indexOf("\"shiftEndTime\":", index);
-                if (startIdx == -1) break;
-                int quoteStart = json.indexOf("\"", startIdx + 15);
-                int quoteEnd = json.indexOf("\"", quoteStart + 1);
-                if (quoteStart != -1 && quoteEnd != -1) {
-                    String endTime = json.substring(quoteStart + 1, quoteEnd);
-                    times.add(endTime);
-                    index = quoteEnd + 1;
-                } else {
-                    break;
+            JsonNode root = OBJECT_MAPPER.readTree(json);
+            List<String> times = new ArrayList<>();
+
+            if (root.isObject()) {
+                for (JsonNode shift : root) {
+                    JsonNode endTime = shift.get("shiftEndTime");
+                    if (endTime != null && endTime.isTextual() && isValidTimeFormat(endTime.asText())) {
+                        times.add(endTime.asText());
+                    }
                 }
             }
+
+            if (times.isEmpty()) {
+                logger.warn("No valid shiftEndTime entries found in Global Property '{}'", SHIFT_DETAILS_GP);
+            }
+            return times;
         } catch (Exception e) {
-            // Error parsing shift details
+            logger.error("Failed to parse Global Property '{}' as JSON. Value was: '{}'",
+                SHIFT_DETAILS_GP, json, e);
+            return new ArrayList<>();
         }
-        return times;
+    }
+
+    private boolean isValidTimeFormat(String time) {
+        return time != null && time.matches("^([01]\\d|2[0-3]):[0-5]\\d$");
     }
 
     private Date getExecutionTime(String shiftEndTime) {
