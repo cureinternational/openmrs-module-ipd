@@ -478,12 +478,12 @@
         <sql>
             INSERT INTO scheduler_task_config(name, description, schedulable_class,
                 start_time, start_time_pattern, repeat_interval, start_on_startup,
-                started, created_by, date_created, uuid)
+                created_by, date_created, uuid)
             VALUES (
                 'Unbookmark Patients At Shift End',
                 'Unbookmarks all patients at shift end. Reads times from Global Property ipd.shiftDetails. Self-reschedules.',
                 'org.openmrs.module.ipd.api.scheduler.tasks.UnbookmarkPatientsAtShiftEnd',
-                DATE_ADD(NOW(), INTERVAL 5 MINUTE), 'MM/dd/yyyy HH:mm:ss', 0, 1, 1, 1, NOW(), UUID()
+                DATE_ADD(NOW(), INTERVAL 5 MINUTE), 'MM/dd/yyyy HH:mm:ss', 0, true, 1, NOW(), UUID()
             );
         </sql>
     </changeSet>
