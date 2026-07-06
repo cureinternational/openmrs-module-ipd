@@ -157,11 +157,13 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
                 if (taskDef != null) {
                     taskDef.setStartTime(earliest);
                     taskDef.setRepeatInterval(0L);
-                    Context.getSchedulerService().saveTaskDefinition(taskDef);
+                    logger.info("Rescheduling UnbookmarkPatientsAtShiftEnd to: {}", earliest);
+                    Context.getSchedulerService().rescheduleTask(taskDef);
+                    logger.info("UnbookmarkPatientsAtShiftEnd rescheduled successfully");
                 }
             }
         } catch (Exception e) {
-            // Silently handle exceptions
+            logger.error("Failed to reschedule UnbookmarkPatientsAtShiftEnd task", e);
         }
     }
 }
