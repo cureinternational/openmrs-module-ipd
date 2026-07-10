@@ -157,8 +157,9 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
                 if (taskDef != null) {
                     taskDef.setStartTime(earliest);
                     taskDef.setRepeatInterval(0L);
-                    taskDef.setLastExecutionTime(new Date());
+                    logger.info("Rescheduling UnbookmarkPatientsAtShiftEnd to: {}", earliest);
                     Context.getSchedulerService().rescheduleTask(taskDef);
+                    logger.info("UnbookmarkPatientsAtShiftEnd rescheduled successfully");
                 }
             }
         } catch (Exception e) {
