@@ -499,4 +499,147 @@
         </sql>
     </changeSet>
 
+    <changeSet id="ipd-create-amendment-reason-concept-set-202407150001" author="Soorya">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM concept_name WHERE name = 'Amendment Reason' AND concept_name_type = 'FULLY_SPECIFIED';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create Amendment Reason concept set with 8 amendment reason concepts in 5 locales</comment>
+        <sql>
+            -- Create Amendment Reason concept set
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'ConvSet'),
+                    1, 1, NOW(), '5c3d2d00-0ad6-434a-b27b-d820796781a4');
+
+            SET @amendment_reason_set_id = LAST_INSERT_ID();
+
+            -- Add concept name for Amendment Reason set
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@amendment_reason_set_id, 'Amendment Reason', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID());
+
+            -- Create 8 amendment reason concepts with translations
+            -- 1. INCORRECT_TIME
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'Misc'),
+                    0, 1, NOW(), UUID());
+            SET @concept_id = LAST_INSERT_ID();
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@concept_id, 'Incorrect Time', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID()),
+                   (@concept_id, 'Hora Incorrecta', 'es', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Heure Incorrecte', 'fr', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Orario Errato', 'it', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Hora Incorreta', 'pt', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID());
+            INSERT INTO concept_set (concept_id, concept_set, sort_weight, creator, date_created, uuid)
+            VALUES (@concept_id, @amendment_reason_set_id, 1, 1, NOW(), UUID());
+
+            -- 2. INCORRECT_DOSE
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'Misc'),
+                    0, 1, NOW(), UUID());
+            SET @concept_id = LAST_INSERT_ID();
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@concept_id, 'Incorrect Dose', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID()),
+                   (@concept_id, 'Dosis Incorrecta', 'es', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Dose Incorrecte', 'fr', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Dose Errata', 'it', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Dose Incorreta', 'pt', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID());
+            INSERT INTO concept_set (concept_id, concept_set, sort_weight, creator, date_created, uuid)
+            VALUES (@concept_id, @amendment_reason_set_id, 2, 1, NOW(), UUID());
+
+            -- 3. INCORRECT_UNIT
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'Misc'),
+                    0, 1, NOW(), UUID());
+            SET @concept_id = LAST_INSERT_ID();
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@concept_id, 'Incorrect Unit', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID()),
+                   (@concept_id, 'Unidad Incorrecta', 'es', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Unité Incorrecte', 'fr', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Unità Errata', 'it', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Unidade Incorreta', 'pt', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID());
+            INSERT INTO concept_set (concept_id, concept_set, sort_weight, creator, date_created, uuid)
+            VALUES (@concept_id, @amendment_reason_set_id, 3, 1, NOW(), UUID());
+
+            -- 4. INCORRECT_DRUG
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'Misc'),
+                    0, 1, NOW(), UUID());
+            SET @concept_id = LAST_INSERT_ID();
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@concept_id, 'Incorrect Drug', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID()),
+                   (@concept_id, 'Medicamento Incorrecto', 'es', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Médicament Incorrect', 'fr', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Farmaco Errato', 'it', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Medicamento Incorreto', 'pt', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID());
+            INSERT INTO concept_set (concept_id, concept_set, sort_weight, creator, date_created, uuid)
+            VALUES (@concept_id, @amendment_reason_set_id, 4, 1, NOW(), UUID());
+
+            -- 5. INCORRECT_PATIENT
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'Misc'),
+                    0, 1, NOW(), UUID());
+            SET @concept_id = LAST_INSERT_ID();
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@concept_id, 'Incorrect Patient', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID()),
+                   (@concept_id, 'Paciente Incorrecto', 'es', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Patient Incorrect', 'fr', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Paziente Errato', 'it', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Paciente Incorreto', 'pt', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID());
+            INSERT INTO concept_set (concept_id, concept_set, sort_weight, creator, date_created, uuid)
+            VALUES (@concept_id, @amendment_reason_set_id, 5, 1, NOW(), UUID());
+
+            -- 6. INCORRECT_ROUTE
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'Misc'),
+                    0, 1, NOW(), UUID());
+            SET @concept_id = LAST_INSERT_ID();
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@concept_id, 'Incorrect Route', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID()),
+                   (@concept_id, 'Ruta Incorrecta', 'es', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Voie Incorrecte', 'fr', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Percorso Errato', 'it', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Rota Incorreta', 'pt', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID());
+            INSERT INTO concept_set (concept_id, concept_set, sort_weight, creator, date_created, uuid)
+            VALUES (@concept_id, @amendment_reason_set_id, 6, 1, NOW(), UUID());
+
+            -- 7. MISSED_DOSE
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'Misc'),
+                    0, 1, NOW(), UUID());
+            SET @concept_id = LAST_INSERT_ID();
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@concept_id, 'Missed Dose', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID()),
+                   (@concept_id, 'Dosis Omitida', 'es', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Dose Manquée', 'fr', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Dose Mancante', 'it', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Dose Perdida', 'pt', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID());
+            INSERT INTO concept_set (concept_id, concept_set, sort_weight, creator, date_created, uuid)
+            VALUES (@concept_id, @amendment_reason_set_id, 7, 1, NOW(), UUID());
+
+            -- 8. OTHER
+            INSERT INTO concept (datatype_id, class_id, is_set, creator, date_created, uuid)
+            VALUES ((SELECT concept_datatype_id FROM concept_datatype WHERE name = 'N/A'),
+                    (SELECT concept_class_id FROM concept_class WHERE name = 'Misc'),
+                    0, 1, NOW(), UUID());
+            SET @concept_id = LAST_INSERT_ID();
+            INSERT INTO concept_name (concept_id, name, locale, concept_name_type, locale_preferred, creator, date_created, uuid)
+            VALUES (@concept_id, 'Other (Please mention the reason in notes)', 'en', 'FULLY_SPECIFIED', 1, 1, NOW(), UUID()),
+                   (@concept_id, 'Otro (Por favor mencione la razón en las notas)', 'es', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Autre (Veuillez mentionner la raison dans les notes)', 'fr', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Altro (Si prega di menzionare il motivo nelle note)', 'it', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID()),
+                   (@concept_id, 'Outro (Por favor mencione o motivo nas notas)', 'pt', 'FULLY_SPECIFIED', 0, 1, NOW(), UUID());
+            INSERT INTO concept_set (concept_id, concept_set, sort_weight, creator, date_created, uuid)
+            VALUES (@concept_id, @amendment_reason_set_id, 8, 1, NOW(), UUID());
+        </sql>
+    </changeSet>
+
 </databaseChangeLog>

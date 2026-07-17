@@ -2,6 +2,7 @@ package org.openmrs.module.ipd.web.contract;
 
 import lombok.*;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.openmrs.Concept;
 import org.openmrs.module.fhirExtension.model.Task;
 import org.openmrs.module.ipd.api.model.MedicationAdministrationNote;
 import org.openmrs.module.webservices.rest.web.ConversionUtil;
@@ -45,12 +46,18 @@ public class MedicationAdministrationNoteResponse {
         MedicationAdministrationAcknowledgementResponse acknowledgement = acknowledgementTask != null ?
                 MedicationAdministrationAcknowledgementResponse.createFrom(acknowledgementTask) : null;
 
+        String amendmentReason = null;
+        Concept statusReason = openmrsObject.getStatusReason();
+        if (statusReason != null) {
+            amendmentReason = statusReason.getName().getName();
+        }
+
         return MedicationAdministrationNoteResponse.builder()
                 .uuid(openmrsObject.getUuid())
                 .author(ConversionUtil.convertToRepresentation(openmrsObject.getAuthor(), Representation.REF))
                 .recordedTime(openmrsObject.getRecordedTime())
                 .text(openmrsObject.getText())
-                .amendmentReason(openmrsObject.getAmendmentReason())
+                .amendmentReason(amendmentReason)
                 .previousNoteUuid(openmrsObject.getPreviousNote() != null ?
                     openmrsObject.getPreviousNote().getUuid() : null)
                 .acknowledgement(acknowledgement)
