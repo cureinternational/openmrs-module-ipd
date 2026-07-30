@@ -289,10 +289,8 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             JsonNode dosages = MAPPER.readTree(order.getDosingInstructions());
             for (JsonNode dosage : dosages) {
                 if (dosage.path("sequence").asInt() != sequence) continue;
-                for (JsonNode ext : dosage.path("extension")) {
-                    if ("isLoadingDose".equals(ext.path("url").asText()) && ext.path("valueBoolean").asBoolean(false)) {
-                        return 1;
-                    }
+                if (dosage.path("timing").path("repeat").path("count").asInt(0) == 1) {
+                    return 1;
                 }
                 double duration = dosage.path("timing").path("repeat").path("duration").asDouble(0);
                 String durationUnit = dosage.path("timing").path("repeat").path("durationUnit").asText("d");
@@ -352,11 +350,8 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 if (dosage.path("sequence").asInt() != sequence) continue;
 
                 // Loading dose is always start-time regardless of frequency name
-                JsonNode extensions = dosage.path("extension");
-                for (JsonNode ext : extensions) {
-                    if ("isLoadingDose".equals(ext.path("url").asText()) && ext.path("valueBoolean").asBoolean(false)) {
-                        return true;
-                    }
+                if (dosage.path("timing").path("repeat").path("count").asInt(0) == 1) {
+                    return true;
                 }
 
                 String frequencyName = dosage.path("timing").path("code").path("text").asText(null);

@@ -191,9 +191,8 @@ public class DrugOrderScheduleResponseTest {
 
     @Test
     public void shouldComputeStartTimeMode_WhenStageIsLoadingDose() {
-        String fhirJson = "[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once\"}},"
-            + "\"doseAndRate\":[{\"doseQuantity\":{\"value\":5,\"unit\":\"mg\"}}],"
-            + "\"extension\":[{\"url\":\"isLoadingDose\",\"valueBoolean\":true}]}]";
+        String fhirJson = "[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once\"},\"repeat\":{\"count\":1}},"
+            + "\"doseAndRate\":[{\"doseQuantity\":{\"value\":5,\"unit\":\"mg\"}}]}]";
         Slot slot = makeVdpSlot(1, Slot.SlotStatus.SCHEDULED, fhirJson);
 
         DrugOrderScheduleResponse response = DrugOrderScheduleResponse.createFrom(makeSchedule(Collections.singletonList(slot)));
@@ -207,8 +206,7 @@ public class DrugOrderScheduleResponseTest {
     public void shouldComputeStartTimeMode_WhenFrequencyIsInStartTimeFrequencies() {
         String fhirJson = "[{\"sequence\":2,\"timing\":{\"code\":{\"text\":\"Once a day\"},"
             + "\"repeat\":{\"duration\":3,\"durationUnit\":\"d\"}},"
-            + "\"doseAndRate\":[{\"doseQuantity\":{\"value\":3,\"unit\":\"mg\"}}],"
-            + "\"extension\":[{\"url\":\"isLoadingDose\",\"valueBoolean\":false}]}]";
+            + "\"doseAndRate\":[{\"doseQuantity\":{\"value\":3,\"unit\":\"mg\"}}]}]";
         Slot slot = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, fhirJson);
 
         DrugOrderScheduleResponse response = DrugOrderScheduleResponse.createFrom(makeSchedule(Collections.singletonList(slot)));

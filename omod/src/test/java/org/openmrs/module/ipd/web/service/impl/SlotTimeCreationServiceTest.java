@@ -126,7 +126,7 @@ public class SlotTimeCreationServiceTest {
         slot.setNotes("note-" + sequence);
         if (hasAdmin) slot.setMedicationAdministration(new MedicationAdministration());
         org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":" + sequence + ",\"timing\":{\"code\":{\"text\":\"Twice a day\"},\"repeat\":{\"duration\":2,\"durationUnit\":\"d\"}},\"doseAndRate\":[{\"doseQuantity\":{\"value\":5,\"unit\":\"mg\"}}],\"extension\":[{\"url\":\"isLoadingDose\",\"valueBoolean\":false}]}]");
+        order.setDosingInstructions("[{\"sequence\":" + sequence + ",\"timing\":{\"code\":{\"text\":\"Twice a day\"},\"repeat\":{\"duration\":2,\"durationUnit\":\"d\"}},\"doseAndRate\":[{\"doseQuantity\":{\"value\":5,\"unit\":\"mg\"}}]}]");
         slot.setOrder(order);
         return slot;
     }
@@ -226,7 +226,7 @@ public class SlotTimeCreationServiceTest {
         Slot slot = makeVdpSlot(1, Slot.SlotStatus.SCHEDULED, LocalDateTime.now().plusHours(1), false);
         // Override order with start-time frequency JSON
         org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once a day\"}},\"extension\":[{\"url\":\"isLoadingDose\",\"valueBoolean\":false}]}]");
+        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once a day\"},\"repeat\":{\"duration\":1,\"durationUnit\":\"d\"}}}]");
         slot.setOrder(order);
 
         List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
@@ -239,7 +239,7 @@ public class SlotTimeCreationServiceTest {
     public void shouldSetAdministrationStarted_WhenAnySlotHasAdministration() {
         Slot slot = makeVdpSlot(1, Slot.SlotStatus.COMPLETED, LocalDateTime.now().minusHours(1), true);
         org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once\"}},\"extension\":[{\"url\":\"isLoadingDose\",\"valueBoolean\":true}]}]");
+        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once\"},\"repeat\":{\"count\":1}},\"extension\":[]}]");
         slot.setOrder(order);
 
         List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
@@ -251,12 +251,29 @@ public class SlotTimeCreationServiceTest {
     public void shouldNotSetAllAttended_WhenAnySlotIsStillScheduled() {
         Slot slot = makeVdpSlot(1, Slot.SlotStatus.SCHEDULED, LocalDateTime.now().plusHours(1), false);
         org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once\"}},\"extension\":[{\"url\":\"isLoadingDose\",\"valueBoolean\":true}]}]");
+        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once\"},\"repeat\":{\"count\":1}}}]");
         slot.setOrder(order);
 
         List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
 
         assertFalse(result.get(0).getAllAttended());
+    }
+
+    @Test
+    public void shouldHandleTimingCodeWithCodingArray_BackwardCompatibility() {
+        Slot slot = new Slot();
+        slot.setVariableDosageSequence(2);
+        slot.setStatus(Slot.SlotStatus.SCHEDULED);
+        slot.setStartDateTime(LocalDateTime.now().plusHours(1));
+        org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
+        order.setDosingInstructions("[{\"sequence\":2,\"timing\":{\"code\":{\"text\":\"Twice a day\",\"coding\":[{\"code\":\"freq-uuid-123\",\"display\":\"Twice a day\"}]},\"repeat\":{\"duration\":3,\"durationUnit\":\"d\"}},\"doseAndRate\":[{\"doseQuantity\":{\"value\":5,\"unit\":\"mg\"}}]}]");
+        slot.setOrder(order);
+
+        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
+
+        assertEquals(1, result.size());
+        assertEquals(Integer.valueOf(2), result.get(0).getVariableDosageSequence());
+        assertTrue(result.get(0).getIsScheduled());
     }
 
     // -----------------------------------------------------------------------
