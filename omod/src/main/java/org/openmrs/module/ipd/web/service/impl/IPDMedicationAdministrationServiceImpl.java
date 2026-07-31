@@ -1,6 +1,7 @@
 package org.openmrs.module.ipd.web.service.impl;
 
 import org.apache.commons.lang.StringUtils;
+import org.openmrs.Concept;
 import org.openmrs.Patient;
 import org.openmrs.Provider;
 import org.openmrs.Visit;
@@ -15,7 +16,6 @@ import org.openmrs.module.fhirExtension.model.TaskSearchRequest;
 import org.openmrs.module.fhirExtension.service.TaskService;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationAcknowledgementRequest;
 import org.openmrs.module.ipd.web.contract.MedicationAdministrationNoteRequest;
-import org.openmrs.module.ipd.web.mapper.AcknowledgementTaskMapper;
 import org.openmrs.module.ipd.api.model.MedicationAdministration;
 import org.openmrs.module.ipd.api.model.MedicationAdministrationNote;
 import org.openmrs.module.ipd.api.model.Schedule;
@@ -30,6 +30,7 @@ import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.MedicationAdministrationFactory;
 import org.openmrs.module.ipd.web.factory.ScheduleFactory;
 import org.openmrs.module.ipd.web.factory.SlotFactory;
+import org.openmrs.module.ipd.web.mapper.AcknowledgementTaskMapper;
 import org.openmrs.module.ipd.web.service.IPDMedicationAdministrationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,7 @@ import java.util.UUID;
 public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdministrationService {
 
     private static final String ACKNOWLEDGE_TASK_NAME = "ACKNOWLEDGE_MEDICATION_NOTE";
+    private static final String ACKNOWLEDGEMENT_TASK_TYPE_PROPERTY = "ipd.acknowledgement_task_type";
 
     private FhirMedicationAdministrationService fhirMedicationAdministrationService;
     private MedicationAdministrationTranslator medicationAdministrationTranslator;
@@ -162,9 +164,17 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
         MedicationAdministrationNote newNote = new MedicationAdministrationNote();
         newNote.setUuid(UUID.randomUUID().toString());
         newNote.setText(noteRequest.getText());
-        newNote.setAmendmentReason(noteRequest.getReason());
-        newNote.setPreviousNote(previousNote);
         newNote.setRecordedTime(noteRequest.getRecordedTimeAsLocaltime());
+
+        if (noteRequest.getStatusReasonUuid() != null) {
+            Concept statusReasonConcept = Context.getConceptService().getConceptByUuid(noteRequest.getStatusReasonUuid());
+            if (statusReasonConcept == null) {
+                throw new APIException("Amendment reason concept not found with UUID: " + noteRequest.getStatusReasonUuid());
+            }
+            newNote.setStatusReason(statusReasonConcept);
+        }
+
+        newNote.setPreviousNote(previousNote);
 
         Provider provider = Context.getProviderService().getProviderByUuid(noteRequest.getAuthorUuid());
         newNote.setAuthor(provider);
@@ -193,16 +203,23 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
             throw new APIException("No notes found to acknowledge for this medication administration.");
         }
 
-        Provider provider = Context.getProviderService().getProviderByUuid(acknowledgementRequest.getApprovedByUuid());
-        String encounterUuid = medicationAdministration.getEncounter() != null ? medicationAdministration.getEncounter().getUuid() : null;
+        String taskType = Context.getAdministrationService().getGlobalProperty(ACKNOWLEDGEMENT_TASK_TYPE_PROPERTY);
+        if (taskType == null || taskType.isEmpty()) {
+            throw new APIException("Acknowledgement task type is not configured. Please set the global property: " + ACKNOWLEDGEMENT_TASK_TYPE_PROPERTY);
+        }
+
+        String patientUuid = medicationAdministration.getPatient() != null
+                ? medicationAdministration.getPatient().getUuid()
+                : null;
+
         Task task = acknowledgementTaskMapper.createAcknowledgementTask(
                 latestNote.getUuid(),
-                encounterUuid,
+                patientUuid,
                 ACKNOWLEDGE_TASK_NAME,
+                taskType,
                 acknowledgementRequest.getRemarks(),
                 acknowledgementRequest.getApprovedByUuid()
         );
-
         taskService.saveTask(task);
         return task;
     }
@@ -229,18 +246,10 @@ public class IPDMedicationAdministrationServiceImpl implements IPDMedicationAdmi
     }
 
     private boolean isTaskForNote(Task task, String noteUuid) {
-        if (task == null || task.getFhirTask() == null) {
+        if (task == null || task.getFhirTask() == null || task.getFhirTask().getFocusReference() == null) {
             return false;
         }
-
-        FhirTask fhirTask = task.getFhirTask();
-        if (fhirTask.getForReference() != null &&
-                fhirTask.getForReference().getTargetUuid() != null &&
-                fhirTask.getForReference().getTargetUuid().equals(noteUuid)) {
-            return true;
-        }
-
-        return false;
+        return noteUuid.equals(task.getFhirTask().getFocusReference().getTargetUuid());
     }
 
     private MedicationAdministrationNote getLatestNote(MedicationAdministration medicationAdministration) {

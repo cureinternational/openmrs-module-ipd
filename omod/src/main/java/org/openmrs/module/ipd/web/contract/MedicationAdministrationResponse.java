@@ -136,8 +136,8 @@ public class MedicationAdministrationResponse {
             return null;
         }
         FhirTask fhirTask = task.getFhirTask();
-        if (fhirTask.getForReference() != null) {
-            return fhirTask.getForReference().getTargetUuid();
+        if (fhirTask.getFocusReference() != null) {
+            return fhirTask.getFocusReference().getTargetUuid();
         }
         return null;
     }

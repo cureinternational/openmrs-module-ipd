@@ -1,7 +1,10 @@
 package org.openmrs.module.ipd.web.mapper;
 
 import org.openmrs.Concept;
-import org.openmrs.Encounter;
+import org.openmrs.ConceptClass;
+import org.openmrs.ConceptSearchResult;
+import org.openmrs.ConceptSet;
+import org.openmrs.Patient;
 import org.openmrs.Provider;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.fhir2.model.FhirReference;
@@ -11,60 +14,61 @@ import org.openmrs.module.fhirExtension.model.Task;
 import org.openmrs.module.ipd.api.model.MedicationAdministrationNote;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
  * Mapper for creating FHIR Tasks for medication administration acknowledgements.
- * This mapper is specific to the IPD module's acknowledgement workflow.
+ * This mapper is specific to the IPD module's acknowledgement workflow and is
+ * intentionally kept independent of the shared fhir2Extension TaskMapper.
  */
 @Component
 public class AcknowledgementTaskMapper {
 
-    private static final String ACKNOWLEDGE_TASK_TYPE = "acknowledge_amend_note";
+    private static final String ALL_TASK_TYPES = "All Task Types";
 
     /**
      * Creates a FHIR Task for acknowledging a medication administration note.
      *
-     * @param noteUuid the UUID of the note being acknowledged
-     * @param encounterUuid the encounter UUID (optional)
+     * @param noteUuid the UUID of the note being acknowledged (set as the task's focus)
+     * @param patientUuid the UUID of the patient (set as the task's beneficiary/"for")
      * @param taskName the name/identifier for the task
+     * @param taskType the concept name identifying the task's type, resolved against the
+     *                 "All Task Types" concept set (configured via a global property)
      * @param remarks the acknowledgement remarks/comment
      * @param ownerUuid the UUID of the Provider who is the owner of this task (optional)
      * @return a Task object ready to be saved
      */
-    public Task createAcknowledgementTask(String noteUuid, String encounterUuid,
-                                          String taskName, String remarks, String ownerUuid) {
+    public Task createAcknowledgementTask(String noteUuid, String patientUuid, String taskName,
+                                           String taskType, String remarks, String ownerUuid) {
         Task task = new Task();
         FhirTask fhirTask = new FhirTask();
 
-        // Set basic task properties
         fhirTask.setUuid(UUID.randomUUID().toString());
         fhirTask.setName(taskName);
         fhirTask.setStatus(FhirTask.TaskStatus.COMPLETED);
         fhirTask.setIntent(FhirTask.TaskIntent.ORDER);
         fhirTask.setComment(remarks);
+        fhirTask.setTaskCode(getConceptForTaskType(taskType));
 
-        // Set task type concept
-        fhirTask.setTaskCode(getAcknowledgeNoteConcept());
-
-        // Set forReference to point to the note being acknowledged
-        FhirReference forReference = new FhirReference();
-        forReference.setType(MedicationAdministrationNote.class.getTypeName());
-        forReference.setReference(MedicationAdministrationNote.class.getTypeName() + "/" + noteUuid);
-        forReference.setTargetUuid(noteUuid);
-        fhirTask.setForReference(forReference);
-
-        // Set encounter reference if provided
-        if (encounterUuid != null) {
-            FhirReference encounterReference = new FhirReference();
-            encounterReference.setType(Encounter.class.getTypeName());
-            encounterReference.setReference(Encounter.class.getTypeName() + "/" + encounterUuid);
-            encounterReference.setTargetUuid(encounterUuid);
-            fhirTask.setEncounterReference(encounterReference);
+        if (patientUuid != null) {
+            FhirReference forReference = new FhirReference();
+            forReference.setType(Patient.class.getTypeName());
+            forReference.setReference(Patient.class.getTypeName() + "/" + patientUuid);
+            forReference.setTargetUuid(patientUuid);
+            fhirTask.setForReference(forReference);
         }
 
-        // Set owner reference if provided
+        FhirReference focusReference = new FhirReference();
+        focusReference.setType(MedicationAdministrationNote.class.getTypeName());
+        focusReference.setReference(MedicationAdministrationNote.class.getTypeName() + "/" + noteUuid);
+        focusReference.setTargetUuid(noteUuid);
+        fhirTask.setFocusReference(focusReference);
+
         if (ownerUuid != null) {
             FhirReference ownerReference = new FhirReference();
             ownerReference.setType(Provider.class.getTypeName());
@@ -73,11 +77,11 @@ public class AcknowledgementTaskMapper {
             fhirTask.setOwnerReference(ownerReference);
         }
 
-        // Set requested period
         FhirTaskRequestedPeriod requestedPeriod = new FhirTaskRequestedPeriod();
         requestedPeriod.setTask(fhirTask);
-        requestedPeriod.setRequestedStartTime(new Date());
-        requestedPeriod.setRequestedEndTime(new Date());
+        Date now = new Date();
+        requestedPeriod.setRequestedStartTime(now);
+        requestedPeriod.setRequestedEndTime(now);
 
         task.setFhirTask(fhirTask);
         task.setFhirTaskRequestedPeriod(requestedPeriod);
@@ -85,26 +89,29 @@ public class AcknowledgementTaskMapper {
         return task;
     }
 
-    /**
-     * Gets or creates the ACKNOWLEDGE_NOTE task type concept.
-     *
-     * @return the Concept for ACKNOWLEDGE_NOTE task type, or null if not found
-     */
-    private Concept getAcknowledgeNoteConcept() {
-        // Try to find the ACKNOWLEDGE_NOTE concept from "All Task Types" concept set
+    private Concept getConceptForTaskType(String taskType) {
+        if (taskType == null || taskType.isEmpty()) {
+            return null;
+        }
         try {
-            Concept allTaskTypes = Context.getConceptService().getConceptByName("All Task Types");
-            if (allTaskTypes != null && allTaskTypes.getConceptSets() != null) {
-                return allTaskTypes.getConceptSets().stream()
-                    .map(cs -> cs.getConcept())
-                    .filter(concept -> concept.getNames().stream()
-                        .anyMatch(name -> ACKNOWLEDGE_TASK_TYPE.equals(name.getName())))
+            List<ConceptClass> parentConceptClasses = new ArrayList<>();
+            parentConceptClasses.add(Context.getConceptService().getConceptClassByName("ConvSet"));
+            List<Locale> locales = Arrays.asList(Locale.ENGLISH);
+            List<ConceptSearchResult> conceptsSearchResult = Context.getConceptService()
+                    .getConcepts(ALL_TASK_TYPES, locales, false, parentConceptClasses, null, null, null, null, 0, null);
+            if (conceptsSearchResult.isEmpty()) {
+                return null;
+            }
+            return conceptsSearchResult.stream()
+                    .map(ConceptSearchResult::getConcept)
+                    .filter(concept -> concept != null)
+                    .flatMap(concept -> concept.getConceptSets().stream().map(ConceptSet::getConcept))
+                    .filter(concept -> concept.getNames(false) != null &&
+                            concept.getNames(false).stream().anyMatch(name -> name.getName().equals(taskType)))
                     .findFirst()
                     .orElse(null);
-            }
         } catch (Exception e) {
-            // If concept not found, return null - task will still be created without taskCode
+            return null;
         }
-        return null;
     }
 }
