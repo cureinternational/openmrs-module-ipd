@@ -30,6 +30,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+
+
+
 @Service
 @Transactional
 public class IPDVisitServiceImpl implements IPDVisitService {
@@ -43,6 +46,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
     private ReferenceService referenceService;
     private VisitService visitService;
     private SlotService slotService;
+
 
     @Autowired
     public IPDVisitServiceImpl(BahmniDrugOrderService drugOrderService,
@@ -183,14 +187,18 @@ public class IPDVisitServiceImpl implements IPDVisitService {
 
         if (currentVisitIndex == -1) return result;
 
-        boolean foundOPD = false, foundClosedIPD = false;
+        final Set<String> OUTPATIENT_VISIT_TYPES =new HashSet<>(Arrays.asList("OPD", "In Absentia", "Lab Visit"));
+        boolean foundOutpatient = false, foundClosedIPD = false;
         for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
-            if (foundOPD && foundClosedIPD) break;
-            Visit v = sortedVisits.get(i);
+            
+              Visit v = sortedVisits.get(i);
+            if (foundOutpatient && foundClosedIPD) break;
+           
+            if (v.getVisitType() == null) continue;     // guard against visits with no type
             String visitType = v.getVisitType().getName();
-            if (!foundOPD && "OPD".equals(visitType)) {
+            if (!foundOutpatient && OUTPATIENT_VISIT_TYPES.contains(visitType)) {
                 result.add(v.getUuid());
-                foundOPD = true;
+                foundOutpatient = true;
             } else if (!foundClosedIPD && "IPD".equals(visitType) && v.getStopDatetime() != null) {
                 result.add(v.getUuid());
                 foundClosedIPD = true;
