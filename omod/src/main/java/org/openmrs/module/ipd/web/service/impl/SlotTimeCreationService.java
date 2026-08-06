@@ -1,5 +1,6 @@
 package org.openmrs.module.ipd.web.service.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +10,7 @@ import org.openmrs.module.ipd.api.util.DateTimeUtil;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 import org.openmrs.module.ipd.web.model.StageScheduleStatus;
 import org.openmrs.module.ipd.api.model.Slot;
+import org.openmrs.module.ipd.web.contract.CrossingSlotContract;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -27,6 +30,9 @@ import static org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest.Medi
 @Component
 public class SlotTimeCreationService extends BaseOpenmrsService {
 
+    private static final String CROSSING_SLOTS_BY_ORDER_KEY = "crossingSlotsByOrder";
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     public static final List<String> START_TIME_FREQUENCIES = Arrays.asList("Every Hour", "Every 2 hours", "Every 3 hours", "Every 4 hours", "Every 6 hours", "Every 8 hours", "Every 12 hours", "Once a day", "Nocte (At Night)", "Every 30 minutes", "STAT (Immediately)", "In Afternoon", "In Morning", "Once a week", "Twice a week", "Three times a week", "Four days a week", "Five days a week", "Six days a week", "On alternate days", "Monthly", "Once a month", "Every 2 weeks", "Every 3 weeks");
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -37,6 +43,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         if (request.getSlotStartTimeAsLocaltime() != null && request.getMedicationFrequency() == START_TIME_DURATION_FREQUENCY) {
             return getSlotsStartTimeWithStartTimeDurationFrequency(request, order);
         } else if ((!CollectionUtils.isEmpty(request.getFirstDaySlotsStartTimeAsLocalTime()) ||
+                !CollectionUtils.isEmpty(request.getCrossingSlotsStartTimeAsLocalTime(null, null)) ||
                 !CollectionUtils.isEmpty(request.getDayWiseSlotsStartTimeAsLocalTime()) ||
                 !CollectionUtils.isEmpty(request.getRemainingDaySlotsStartTimeAsLocalTime()))
                         && request.getMedicationFrequency() == FIXED_SCHEDULE_FREQUENCY) {
@@ -68,8 +75,44 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             numberOfSlotsStartTimeToBeCreated -= slotsToBeAddedForFirstDay.size();
         }
 
+        List<LocalDateTime> nonRecurringFirstDayCrossings =
+                request.getCrossingSlotsStartTimeAsLocalTime(false, CrossingSlotContract.SourceBucket.FIRST_DAY);
+        if (!CollectionUtils.isEmpty(nonRecurringFirstDayCrossings) && numberOfSlotsStartTimeToBeCreated > 0) {
+            List<LocalDateTime> toAdd = numberOfSlotsStartTimeToBeCreated < nonRecurringFirstDayCrossings.size()
+                    ? nonRecurringFirstDayCrossings.subList(0, numberOfSlotsStartTimeToBeCreated)
+                    : nonRecurringFirstDayCrossings;
+            slotsStartTime.addAll(toAdd);
+            numberOfSlotsStartTimeToBeCreated -= toAdd.size();
+        }
 
-        List<LocalDateTime> remainingDaySlotsStartTime = request.getRemainingDaySlotsStartTimeAsLocalTime();
+        List<LocalDateTime> dayWiseSlotsStartTimeFromRequest = request.getDayWiseSlotsStartTimeAsLocalTime();
+        List<LocalDateTime> nextSlotsStartTime = new ArrayList<>(
+                dayWiseSlotsStartTimeFromRequest != null ? dayWiseSlotsStartTimeFromRequest : Collections.emptyList()
+        );
+        List<LocalDateTime> recurringFirstDayCrossings =
+                request.getCrossingSlotsStartTimeAsLocalTime(true, CrossingSlotContract.SourceBucket.FIRST_DAY);
+        nextSlotsStartTime.addAll(recurringFirstDayCrossings);
+
+        List<LocalDateTime> remainingDaySlotsStartTime = new ArrayList<>(
+                request.getRemainingDaySlotsStartTimeAsLocalTime() != null ? request.getRemainingDaySlotsStartTimeAsLocalTime() : Collections.emptyList()
+        );
+
+        List<LocalDateTime> recurringDayWiseCrossings =
+                request.getCrossingSlotsStartTimeAsLocalTime(true, CrossingSlotContract.SourceBucket.DAY_WISE);
+        if (!CollectionUtils.isEmpty(recurringDayWiseCrossings)) {
+            long offsetDays = 1;
+            if (!CollectionUtils.isEmpty(dayWiseSlotsStartTimeFromRequest) && !CollectionUtils.isEmpty(remainingDaySlotsStartTime)) {
+                offsetDays = ChronoUnit.DAYS.between(
+                        dayWiseSlotsStartTimeFromRequest.get(0).toLocalDate(),
+                        remainingDaySlotsStartTime.get(0).toLocalDate());
+            }
+            final long finalOffsetDays = offsetDays;
+            List<LocalDateTime> shifted = recurringDayWiseCrossings.stream()
+                    .map(t -> t.plusDays(finalOffsetDays))
+                    .collect(Collectors.toList());
+            remainingDaySlotsStartTime.addAll(shifted);
+        }
+
         if (!CollectionUtils.isEmpty(remainingDaySlotsStartTime) && numberOfSlotsStartTimeToBeCreated > 0) {
             List<LocalDateTime> slotsToBeAddedForRemainingDay = numberOfSlotsStartTimeToBeCreated < remainingDaySlotsStartTime.size()
                     ? remainingDaySlotsStartTime.subList(0, numberOfSlotsStartTimeToBeCreated)
@@ -78,7 +121,6 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             slotsStartTime.addAll(slotsToBeAddedForRemainingDay);
         }
 
-        List<LocalDateTime> nextSlotsStartTime = request.getDayWiseSlotsStartTimeAsLocalTime();
         if (!CollectionUtils.isEmpty(nextSlotsStartTime) && numberOfSlotsStartTimeToBeCreated > 0) {
             List<LocalDateTime> initialSlotsToBeAddedForSecondDay = numberOfSlotsStartTimeToBeCreated < nextSlotsStartTime.size()
                     ? nextSlotsStartTime.subList(0, numberOfSlotsStartTimeToBeCreated)
@@ -166,6 +208,8 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                         drugOrderSchedule.setDayWiseSlotsStartTime(sortedList.get(1).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
                     }
                 }
+                List<CrossingSlotContract> persistedCrossingSlots = readPersistedCrossingSlots(slotsByOrder.get(drugOrder), drugOrder.getUuid());
+                drugOrderSchedule.setCrossingSlots(persistedCrossingSlots);
             }
             List<Slot> slots = slotsByOrder.get(drugOrder);
             drugOrderSchedule.setSlots(slots);
@@ -362,5 +406,29 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 slot.getOrder() != null ? slot.getOrder().getUuid() : "null", e);
         }
         return true;
+    }
+
+    private List<CrossingSlotContract> readPersistedCrossingSlots(List<Slot> orderSlots, String orderUuid) {
+        if (CollectionUtils.isEmpty(orderSlots) || orderSlots.get(0).getSchedule() == null) {
+            return Collections.emptyList();
+        }
+        String comments = orderSlots.get(0).getSchedule().getComments();
+        if (comments == null || comments.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            Map<String, Object> root = objectMapper.readValue(comments, new TypeReference<Map<String, Object>>() {});
+            Object byOrderObj = root.get(CROSSING_SLOTS_BY_ORDER_KEY);
+            if (byOrderObj == null) {
+                return Collections.emptyList();
+            }
+            Map<String, List<CrossingSlotContract>> byOrder = objectMapper.convertValue(
+                    byOrderObj,
+                    new TypeReference<Map<String, List<CrossingSlotContract>>>() {}
+            );
+            return byOrder.getOrDefault(orderUuid, Collections.emptyList());
+        } catch (Exception ignored) {
+            return Collections.emptyList();
+        }
     }
 }

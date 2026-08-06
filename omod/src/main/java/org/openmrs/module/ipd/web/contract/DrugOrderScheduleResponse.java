@@ -18,6 +18,7 @@ public class DrugOrderScheduleResponse {
     private List<Long> firstDaySlotsStartTime;
     private List<Long> dayWiseSlotsStartTime;
     private List<Long> remainingDaySlotsStartTime;
+    private List<CrossingSlotContract> crossingSlots;
     private Long slotStartTime;
     private Boolean medicationAdministrationStarted;
     private Boolean pendingSlotsAvailable;
@@ -32,6 +33,7 @@ public class DrugOrderScheduleResponse {
             .firstDaySlotsStartTime(drugOrderSchedule.getFirstDaySlotsStartTime())
             .dayWiseSlotsStartTime(drugOrderSchedule.getDayWiseSlotsStartTime())
             .remainingDaySlotsStartTime(drugOrderSchedule.getRemainingDaySlotsStartTime())
+            .crossingSlots(drugOrderSchedule.getCrossingSlots())
             .slotStartTime(drugOrderSchedule.getSlotStartTime())
             .medicationAdministrationStarted(slots.stream().anyMatch(slot -> slot.getMedicationAdministration() != null))
             .allSlotsAttended(!slots.stream().anyMatch(slot -> slot.getStatus().equals(Slot.SlotStatus.SCHEDULED)))

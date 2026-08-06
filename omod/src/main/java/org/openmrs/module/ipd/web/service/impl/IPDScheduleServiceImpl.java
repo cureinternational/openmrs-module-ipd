@@ -1,5 +1,7 @@
 package org.openmrs.module.ipd.web.service.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmrs.*;
 import org.openmrs.api.APIException;
 import org.openmrs.api.ConceptService;
@@ -17,6 +19,7 @@ import org.openmrs.module.ipd.api.service.ScheduleService;
 import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
 import org.openmrs.module.ipd.api.util.IPDConstants;
+import org.openmrs.module.ipd.web.contract.CrossingSlotContract;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.ScheduleFactory;
 import org.openmrs.module.ipd.web.factory.SlotFactory;
@@ -37,6 +40,9 @@ import static org.openmrs.module.ipd.api.model.Slot.SlotStatus.SCHEDULED;
 @Service
 @Transactional
 public class IPDScheduleServiceImpl implements IPDScheduleService {
+
+    private static final String CROSSING_SLOTS_BY_ORDER_KEY = "crossingSlotsByOrder";
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final ScheduleService scheduleService;
     private final ScheduleFactory scheduleFactory;
@@ -84,6 +90,8 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
             List<LocalDateTime> slotsStartTime = slotTimeCreationService.createSlotsStartTimeFrom(scheduleMedicationRequest, order);
             slotFactory.createSlotsForMedicationFrom(savedSchedule, slotsStartTime, order, null, SCHEDULED, ServiceType.MEDICATION_REQUEST, scheduleMedicationRequest.getComments(), scheduleMedicationRequest.getVariableDosageSequence())
                     .forEach(slotService::saveSlot);
+            upsertCrossingSlotsMetadata(savedSchedule, order.getUuid(), scheduleMedicationRequest.getCrossingSlots());
+            scheduleService.saveSchedule(savedSchedule);
         }
         else if (serviceType.equals(ServiceType.AS_NEEDED_PLACEHOLDER)){
             List<Slot> existingPlaceholders = getMedicationSlots(
@@ -139,6 +147,40 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
         existingSlots.stream()
             .filter(s -> Objects.equals(s.getVariableDosageSequence(), variableDosageSequence))
             .forEach(slot -> slotService.voidSlot(slot, voidReason));
+    }
+
+    private void upsertCrossingSlotsMetadata(Schedule schedule,
+                                             String orderUuid,
+                                             List<CrossingSlotContract> crossingSlots) {
+        Map<String, List<CrossingSlotContract>> byOrder = readCrossingSlotsByOrder(schedule.getComments());
+        byOrder.put(orderUuid, crossingSlots != null ? crossingSlots : Collections.emptyList());
+        schedule.setComments(writeCrossingSlotsByOrder(byOrder));
+    }
+
+    private Map<String, List<CrossingSlotContract>> readCrossingSlotsByOrder(String comments) {
+        if (comments == null || comments.trim().isEmpty()) {
+            return new HashMap<>();
+        }
+        try {
+            Map<String, Object> root = objectMapper.readValue(comments, new TypeReference<Map<String, Object>>() {});
+            Object byOrderObj = root.get(CROSSING_SLOTS_BY_ORDER_KEY);
+            if (byOrderObj == null) {
+                return new HashMap<>();
+            }
+            return objectMapper.convertValue(byOrderObj, new TypeReference<Map<String, List<CrossingSlotContract>>>() {});
+        } catch (Exception ignored) {
+            return new HashMap<>();
+        }
+    }
+
+    private String writeCrossingSlotsByOrder(Map<String, List<CrossingSlotContract>> byOrder) {
+        try {
+            Map<String, Object> root = new HashMap<>();
+            root.put(CROSSING_SLOTS_BY_ORDER_KEY, byOrder);
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
 
