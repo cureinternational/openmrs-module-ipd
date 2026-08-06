@@ -30,9 +30,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-
-
-
 @Service
 @Transactional
 public class IPDVisitServiceImpl implements IPDVisitService {
@@ -46,7 +43,6 @@ public class IPDVisitServiceImpl implements IPDVisitService {
     private ReferenceService referenceService;
     private VisitService visitService;
     private SlotService slotService;
-
 
     @Autowired
     public IPDVisitServiceImpl(BahmniDrugOrderService drugOrderService,
@@ -67,8 +63,6 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         this.visitService = visitService;
         this.slotService = slotService;
     }
-
-
 
     @Override
     public List<IPDDrugOrder> getPrescribedOrders(String visitUuid, Boolean includeActiveVisit, Integer numberOfVisits, Date startDate, Date endDate, Boolean getEffectiveOrdersOnly) {
