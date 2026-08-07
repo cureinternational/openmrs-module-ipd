@@ -69,6 +69,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         List<String> visitUuidsList = new ArrayList<>();
         visitUuidsList.add(visitUuid);
         Visit visit = visitService.getVisitByUuid(visitUuid);
+        if (visit == null) return Collections.emptyList();
         // Fetch drug orders from preceding OPD and preceding closed IPD visits.
         // OPD: covers same-day OPD-to-IPD emergency conversions.
         // Closed IPD: covers active drugs from the patient's most recent prior admission.
@@ -168,7 +169,8 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         return slotService.getSlotsByPatientAndVisitAndServiceType(subjectReference.get(), visit, concept);
     }
 
-    private List<String> getPrecedingVisitUuids(Patient patient, String currentVisitUuid) {
+    private List<String> getPrecedingVisitUuids(Patient patient, String currentVisitUuid) 
+    {
         List<String> result = new ArrayList<>();
         List<Visit> sortedVisits = visitService.getVisitsByPatient(patient).stream()
                 .sorted(Comparator.comparing(Visit::getStartDatetime).reversed())
@@ -182,20 +184,20 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         if (currentVisitIndex == -1) return result;
 
         final Set<String> OUTPATIENT_VISIT_TYPES =new HashSet<>(Arrays.asList("OPD", "In Absentia", "Lab Visit"));
-        boolean foundOutpatient = false, foundClosedIPD = false;
+        boolean foundClosedIPD = false;
         for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
             
               Visit v = sortedVisits.get(i);
-            if (foundOutpatient && foundClosedIPD) break;
+            if (foundClosedIPD) break;
            
-            if (v.getVisitType() == null) continue;     // guard against visits with no type
+            if (v.getVisitType() == null) continue;   
             String visitType = v.getVisitType().getName();
-            if (!foundOutpatient && OUTPATIENT_VISIT_TYPES.contains(visitType)) {
+            if (OUTPATIENT_VISIT_TYPES.contains(visitType)) {
                 result.add(v.getUuid());
-                foundOutpatient = true;
             } else if (!foundClosedIPD && "IPD".equals(visitType) && v.getStopDatetime() != null) {
                 result.add(v.getUuid());
                 foundClosedIPD = true;
+               
             }
         }
         return result;
