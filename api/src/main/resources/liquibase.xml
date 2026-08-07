@@ -499,4 +499,20 @@
         </sql>
     </changeSet>
 
+    <changeSet id="ipd_slot_add_crossing_columns_202608062245" author="avni">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="ipd_slot" columnName="source_bucket"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="ipd_slot">
+            <column name="source_bucket" type="varchar(20)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="recurring_crossing" type="BOOLEAN">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
 </databaseChangeLog>

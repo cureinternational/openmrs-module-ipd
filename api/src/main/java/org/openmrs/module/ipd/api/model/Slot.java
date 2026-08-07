@@ -27,6 +27,12 @@ public class Slot extends BaseChangeableOpenmrsData {
 		STOPPED,
 		MISSED
 	}
+
+	public enum SourceBucket {
+		FIRST_DAY,
+		DAY_WISE,
+		FINAL
+	}
 	
 	@EqualsAndHashCode.Include
 	@Id
@@ -94,9 +100,15 @@ public class Slot extends BaseChangeableOpenmrsData {
 	@Column(name = "variable_dosage_sequence")
 	private Integer variableDosageSequence;
 
+	@Column(name = "source_bucket")
+	@Enumerated(EnumType.STRING)
+	private SourceBucket sourceBucket;
+
+	@Column(name = "recurring_crossing")
+	private Boolean recurringCrossing;
+
 	public Boolean isStopped() {
 		return this.status !=null && this.status == SlotStatus.STOPPED;
 	}
 }
-
 

@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
 import org.openmrs.module.ipd.api.model.ServiceType;
+import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
 
 import java.time.LocalDateTime;
@@ -56,7 +57,7 @@ public class ScheduleMedicationRequest {
         return remainingDaySlotsStartTime != null ? remainingDaySlotsStartTime.stream().map(DateTimeUtil::convertEpocUTCToLocalTimeZone).collect(Collectors.toList()) : null;
     }
 
-    public List<LocalDateTime> getCrossingSlotsStartTimeAsLocalTime(Boolean recurring, CrossingSlotContract.SourceBucket sourceBucket) {
+    public List<LocalDateTime> getCrossingSlotsStartTimeAsLocalTime(Boolean recurring, Slot.SourceBucket sourceBucket) {
         if (crossingSlots == null) return Collections.emptyList();
         return crossingSlots.stream()
                 .filter(s -> s.getEpoch() != null)
