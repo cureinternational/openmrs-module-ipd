@@ -183,7 +183,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
 
         if (currentVisitIndex == -1) return result;
 
-        final Set<String> OUTPATIENT_VISIT_TYPES =new HashSet<>(Arrays.asList("OPD", "In Absentia", "Lab Visit"));
+        final Set<String> OUTPATIENT_VISIT_TYPES =new HashSet<>(Arrays.asList("OPD", "In Absentia", "LAB VISIT"));
         boolean foundClosedIPD = false;
         for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
             
