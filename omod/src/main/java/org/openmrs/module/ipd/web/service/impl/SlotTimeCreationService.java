@@ -48,6 +48,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
     }
 
     private SlotTimeCreationResult getSlotsStartTimeWithFixedScheduleFrequency(ScheduleMedicationRequest request, DrugOrder order) {
+        if (order.getQuantity() == null || order.getDose() == null) {
+            return SlotTimeCreationResult.withoutCrossingTags(Collections.emptyList());
+        }
         int numberOfSlotsStartTimeToBeCreated = (int) (Math.ceil(order.getQuantity() / order.getDose()));
 
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
