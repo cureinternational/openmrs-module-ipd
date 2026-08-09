@@ -48,10 +48,15 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
     }
 
     private SlotTimeCreationResult getSlotsStartTimeWithFixedScheduleFrequency(ScheduleMedicationRequest request, DrugOrder order) {
+        int numberOfSlotsStartTimeToBeCreated;
         if (order.getQuantity() == null || order.getDose() == null) {
-            return SlotTimeCreationResult.withoutCrossingTags(Collections.emptyList());
+            numberOfSlotsStartTimeToBeCreated = inferRequestedSlotsCount(request);
+            if (numberOfSlotsStartTimeToBeCreated <= 0) {
+                return SlotTimeCreationResult.withoutCrossingTags(Collections.emptyList());
+            }
+        } else {
+            numberOfSlotsStartTimeToBeCreated = (int) (Math.ceil(order.getQuantity() / order.getDose()));
         }
-        int numberOfSlotsStartTimeToBeCreated = (int) (Math.ceil(order.getQuantity() / order.getDose()));
 
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
         Map<LocalDateTime, CrossingSlotTag> crossingTagsByStartTime = new HashMap<>();
@@ -146,6 +151,34 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         }
 
         return new SlotTimeCreationResult(slotsStartTime, crossingTagsByStartTime);
+    }
+
+    private int inferRequestedSlotsCount(ScheduleMedicationRequest request) {
+        int firstDayCount = CollectionUtils.isEmpty(request.getFirstDaySlotsStartTimeAsLocalTime())
+                ? 0
+                : request.getFirstDaySlotsStartTimeAsLocalTime().size();
+        int dayWiseCount = CollectionUtils.isEmpty(request.getDayWiseSlotsStartTimeAsLocalTime())
+                ? 0
+                : request.getDayWiseSlotsStartTimeAsLocalTime().size();
+        int remainingCount = CollectionUtils.isEmpty(request.getRemainingDaySlotsStartTimeAsLocalTime())
+                ? 0
+                : request.getRemainingDaySlotsStartTimeAsLocalTime().size();
+        int nonRecurringFirstDayCrossingCount = request
+                .getCrossingSlotsStartTimeAsLocalTime(false, Slot.SourceBucket.FIRST_DAY)
+                .size();
+        int recurringFirstDayCrossingCount = request
+                .getCrossingSlotsStartTimeAsLocalTime(true, Slot.SourceBucket.FIRST_DAY)
+                .size();
+        int recurringDayWiseCrossingCount = request
+                .getCrossingSlotsStartTimeAsLocalTime(true, Slot.SourceBucket.DAY_WISE)
+                .size();
+
+        return firstDayCount
+                + dayWiseCount
+                + remainingCount
+                + nonRecurringFirstDayCrossingCount
+                + recurringFirstDayCrossingCount
+                + recurringDayWiseCrossingCount;
     }
 
     private List<LocalDateTime> getSlotsStartTimeWithStartTimeDurationFrequency(ScheduleMedicationRequest request, DrugOrder order) {

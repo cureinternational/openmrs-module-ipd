@@ -82,7 +82,15 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
                 throw new RuntimeException("Slots already created for this drug order");
             }
             SlotTimeCreationResult slotTimeCreationResult = slotTimeCreationService.createSlotsStartTimeFrom(scheduleMedicationRequest, order);
-            List<Slot> slots = slotFactory.createSlotsForMedicationFrom(savedSchedule, slotTimeCreationResult.getSlotsStartTime(), order, null, SCHEDULED, ServiceType.MEDICATION_REQUEST, scheduleMedicationRequest.getComments());
+            List<Slot> slots = slotFactory.createSlotsForMedicationFrom(
+                    savedSchedule,
+                    slotTimeCreationResult.getSlotsStartTime(),
+                    order,
+                    null,
+                    SCHEDULED,
+                    ServiceType.MEDICATION_REQUEST,
+                    scheduleMedicationRequest.getComments(),
+                    scheduleMedicationRequest.getVariableDosageSequence());
             tagCrossingSlots(slots, slotTimeCreationResult.getCrossingTagsByStartTime());
             slots.forEach(slotService::saveSlot);
         }
