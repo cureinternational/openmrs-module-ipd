@@ -78,7 +78,14 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
         ServiceType serviceType = scheduleMedicationRequest.getServiceType() !=null ? scheduleMedicationRequest.getServiceType() : ServiceType.MEDICATION_REQUEST;
         if(serviceType.equals(ServiceType.MEDICATION_REQUEST)){
             List<Slot> existingSlots = getMedicationSlots(patient.getUuid(),ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{order.getUuid()})));
-            if (existingSlots !=null && !existingSlots.isEmpty()) {
+            boolean stageAlreadyScheduled;
+            if (scheduleMedicationRequest.getVariableDosageSequence() != null) {
+                stageAlreadyScheduled = existingSlots != null && existingSlots.stream()
+                        .anyMatch(s -> Objects.equals(s.getVariableDosageSequence(), scheduleMedicationRequest.getVariableDosageSequence()) && !s.getVoided());
+            } else {
+                stageAlreadyScheduled = existingSlots != null && !existingSlots.isEmpty();
+            }
+            if (stageAlreadyScheduled) {
                 throw new RuntimeException("Slots already created for this drug order");
             }
             SlotTimeCreationResult slotTimeCreationResult = slotTimeCreationService.createSlotsStartTimeFrom(scheduleMedicationRequest, order);
@@ -139,13 +146,19 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
 
     @Override
     public Schedule updateMedicationSchedule(ScheduleMedicationRequest scheduleMedicationRequest) {
-        voidExistingMedicationSlotsForOrder(scheduleMedicationRequest.getPatientUuid(),scheduleMedicationRequest.getOrderUuid(),"");
+        voidExistingMedicationSlotsForOrder(
+                scheduleMedicationRequest.getPatientUuid(),
+                scheduleMedicationRequest.getOrderUuid(),
+                "",
+                scheduleMedicationRequest.getVariableDosageSequence());
         return saveMedicationSchedule(scheduleMedicationRequest);
     }
 
-    private void voidExistingMedicationSlotsForOrder(String patientUuid,String orderUuid,String voidReason){
+    private void voidExistingMedicationSlotsForOrder(String patientUuid,String orderUuid,String voidReason, Integer variableDosageSequence){
         List<Slot> existingSlots = getMedicationSlots(patientUuid,ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{orderUuid})));
-        existingSlots.stream().forEach(slot -> slotService.voidSlot(slot,voidReason));
+        existingSlots.stream()
+                .filter(slot -> variableDosageSequence == null || Objects.equals(slot.getVariableDosageSequence(), variableDosageSequence))
+                .forEach(slot -> slotService.voidSlot(slot,voidReason));
     }
 
     private void tagCrossingSlots(List<Slot> slots, Map<LocalDateTime, CrossingSlotTag> crossingTagsByStartTime) {

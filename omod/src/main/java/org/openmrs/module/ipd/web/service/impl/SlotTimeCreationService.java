@@ -7,6 +7,7 @@ import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
 import org.openmrs.module.ipd.web.model.CrossingSlotTag;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
+import org.openmrs.module.ipd.web.model.StageScheduleStatus;
 import org.openmrs.module.ipd.web.model.SlotTimeCreationResult;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.web.contract.CrossingSlotContract;
@@ -204,13 +205,19 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         HashMap<String, DrugOrderSchedule> drugOrderScheduleHash= new HashMap<>();
         for (DrugOrder drugOrder : slotsByOrder.keySet()) {
             DrugOrderSchedule drugOrderSchedule = new DrugOrderSchedule();
-            if (drugOrder.getAsNeeded() || drugOrder.getFrequency() == null || drugOrder.getDuration() == null || drugOrder.getQuantity() == 0.0) {
-                drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slotsByOrder.get(drugOrder).get(0).getStartDateTime()));
+            List<Slot> orderSlots = slotsByOrder.get(drugOrder);
+            if (CollectionUtils.isEmpty(orderSlots)) {
+                continue;
+            }
+
+            boolean hasSingleSlot = orderSlots.size() == 1;
+            if (drugOrder.getAsNeeded() || hasSingleSlot || drugOrder.getQuantity() == 0.0) {
+                drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(orderSlots.get(0).getStartDateTime()));
             }
             else {
-                Double frequencyPerDay = drugOrder.getFrequency().getFrequencyPerDay();
-                String frequency = drugOrder.getFrequency().getName();
-                Map<LocalDate, List<LocalDateTime>> groupedByDateAndEpoch = slotsByOrder.get(drugOrder).stream()
+                Double frequencyPerDay = drugOrder.getFrequency() != null ? drugOrder.getFrequency().getFrequencyPerDay() : null;
+                String frequency = drugOrder.getFrequency() != null ? drugOrder.getFrequency().getName() : null;
+                Map<LocalDate, List<LocalDateTime>> groupedByDateAndEpoch = orderSlots.stream()
                         .collect(Collectors.groupingBy(
                                 obj -> obj.getStartDateTime().toLocalDate(),
                                 Collectors.mapping(
@@ -224,9 +231,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                         .map(Map.Entry::getValue) // Get the list of Longs for each entry
                         .collect(Collectors.toList()); // Collect the list of lists into a single ArrayList
 
-                if (START_TIME_FREQUENCIES.contains(frequency)) {
+                if (frequency != null && START_TIME_FREQUENCIES.contains(frequency)) {
                     drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(sortedList.get(0).get(0)));
-                } else if (sortedList.get(0).size() == frequencyPerDay || (sortedList.size() == 1)) {
+                } else if ((frequencyPerDay != null && sortedList.get(0).size() == frequencyPerDay) || (sortedList.size() == 1)) {
                     drugOrderSchedule.setDayWiseSlotsStartTime(sortedList.get(0).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
                 } else {
                     drugOrderSchedule.setFirstDaySlotsStartTime(sortedList.get(0).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
@@ -235,7 +242,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                         drugOrderSchedule.setDayWiseSlotsStartTime(sortedList.get(1).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
                     }
                 }
-                List<CrossingSlotContract> crossingSlots = slotsByOrder.get(drugOrder).stream()
+                List<CrossingSlotContract> crossingSlots = orderSlots.stream()
                         .filter(slot -> slot.getSourceBucket() != null)
                         .map(slot -> CrossingSlotContract.builder()
                                 .epoch(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slot.getStartDateTime()))
@@ -253,7 +260,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                         ));
 
                 if (CollectionUtils.isEmpty(crossingSlots)) {
-                    crossingSlots = readPersistedCrossingSlots(slotsByOrder.get(drugOrder), drugOrder.getUuid());
+                    crossingSlots = readPersistedCrossingSlots(orderSlots, drugOrder.getUuid());
                 }
 
                 drugOrderSchedule.setCrossingSlots(crossingSlots);
@@ -267,6 +274,11 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             }
             if (!CollectionUtils.isEmpty(drugOrderSchedule.getRemainingDaySlotsStartTime())) {
                 drugOrderSchedule.setRemainingDaySlotsStartTime(deduplicateEpochs(drugOrderSchedule.getRemainingDaySlotsStartTime()));
+            }
+
+            List<StageScheduleStatus> stageSchedules = buildStageSchedules(orderSlots);
+            if (!CollectionUtils.isEmpty(stageSchedules)) {
+                drugOrderSchedule.setStageSchedules(stageSchedules);
             }
 
             drugOrderSchedule.setSlots(slotsByOrder.get(drugOrder));
@@ -303,5 +315,97 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         } catch (Exception ignored) {
             return Collections.emptyList();
         }
+    }
+
+    private List<StageScheduleStatus> buildStageSchedules(List<Slot> orderSlots) {
+        Map<Integer, List<Slot>> slotsBySequence = orderSlots.stream()
+                .filter(slot -> slot.getVariableDosageSequence() != null)
+                .collect(Collectors.groupingBy(Slot::getVariableDosageSequence, TreeMap::new, Collectors.toList()));
+
+        if (slotsBySequence.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<StageScheduleStatus> stageSchedules = new ArrayList<>();
+        for (Map.Entry<Integer, List<Slot>> entry : slotsBySequence.entrySet()) {
+            Integer sequence = entry.getKey();
+            List<Slot> stageSlots = entry.getValue().stream()
+                    .sorted(Comparator.comparing(Slot::getStartDateTime))
+                    .collect(Collectors.toList());
+
+            StageScheduleStatus.StageScheduleStatusBuilder builder = StageScheduleStatus.builder()
+                    .variableDosageSequence(sequence)
+                    .isScheduled(!stageSlots.isEmpty())
+                    .administrationStarted(stageSlots.stream().anyMatch(s -> s.getMedicationAdministration() != null))
+                    .allAttended(stageSlots.stream().noneMatch(s -> s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
+                    .pendingSlotsAvailable(stageSlots.stream().anyMatch(s ->
+                            s.getStartDateTime() != null &&
+                                    LocalDateTime.now().isBefore(s.getStartDateTime()) &&
+                                    s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
+                    .notes(stageSlots.get(0).getNotes());
+
+            List<List<LocalDateTime>> sortedList = stageSlots.stream()
+                    .filter(slot -> slot.getStartDateTime() != null)
+                    .collect(Collectors.groupingBy(
+                            slot -> slot.getStartDateTime().toLocalDate(),
+                            TreeMap::new,
+                            Collectors.mapping(Slot::getStartDateTime, Collectors.toList())))
+                    .values()
+                    .stream()
+                    .collect(Collectors.toList());
+
+            if (!sortedList.isEmpty()) {
+                if (sortedList.size() == 1) {
+                    builder.dayWiseSlotsStartTime(sortedList.get(0).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
+                } else {
+                    builder.firstDaySlotsStartTime(sortedList.get(0).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
+                    builder.remainingDaySlotsStartTime(sortedList.get(sortedList.size() - 1).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
+                    if (sortedList.size() > 2) {
+                        builder.dayWiseSlotsStartTime(sortedList.get(1).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
+                    }
+                }
+                builder.slotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(sortedList.get(0).get(0)));
+            }
+
+            StageScheduleStatus scheduleStatus = builder.build();
+            List<CrossingSlotContract> stageCrossingSlots = stageSlots.stream()
+                    .filter(slot -> slot.getSourceBucket() != null)
+                    .map(slot -> CrossingSlotContract.builder()
+                            .epoch(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slot.getStartDateTime()))
+                            .recurring(slot.getRecurringCrossing())
+                            .sourceBucket(slot.getSourceBucket())
+                            .build())
+                    .collect(Collectors.collectingAndThen(
+                            Collectors.toMap(
+                                    slot -> slot.getEpoch() + "|" + slot.getSourceBucket() + "|" + slot.getRecurring(),
+                                    slot -> slot,
+                                    (first, ignored) -> first,
+                                    LinkedHashMap::new
+                            ),
+                            map -> new ArrayList<>(map.values())
+                    ));
+
+            stageSchedules.add(StageScheduleStatus.builder()
+                    .variableDosageSequence(scheduleStatus.getVariableDosageSequence())
+                    .isScheduled(scheduleStatus.getIsScheduled())
+                    .administrationStarted(scheduleStatus.getAdministrationStarted())
+                    .allAttended(scheduleStatus.getAllAttended())
+                    .pendingSlotsAvailable(scheduleStatus.getPendingSlotsAvailable())
+                    .notes(scheduleStatus.getNotes())
+                    .slotStartTime(scheduleStatus.getSlotStartTime())
+                    .firstDaySlotsStartTime(deduplicateEpochsNullable(scheduleStatus.getFirstDaySlotsStartTime()))
+                    .dayWiseSlotsStartTime(deduplicateEpochsNullable(scheduleStatus.getDayWiseSlotsStartTime()))
+                    .remainingDaySlotsStartTime(deduplicateEpochsNullable(scheduleStatus.getRemainingDaySlotsStartTime()))
+                    .crossingSlots(stageCrossingSlots)
+                    .build());
+        }
+        return stageSchedules;
+    }
+
+    private List<Long> deduplicateEpochsNullable(List<Long> epochs) {
+        if (CollectionUtils.isEmpty(epochs)) {
+            return epochs;
+        }
+        return deduplicateEpochs(epochs);
     }
 }
