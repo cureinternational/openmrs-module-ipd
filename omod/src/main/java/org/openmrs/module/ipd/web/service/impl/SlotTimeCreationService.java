@@ -18,7 +18,6 @@ import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -97,21 +96,12 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 request.getRemainingDaySlotsStartTimeAsLocalTime() != null ? request.getRemainingDaySlotsStartTimeAsLocalTime() : Collections.emptyList()
         );
 
-        // Recurring day-wise midnight-crossing slot: shifted forward to align with the final day bucket.
+        // Recurring day-wise midnight-crossing slot: persist in the exact epoch supplied by UI.
         List<LocalDateTime> recurringDayWiseCrossings =
                 request.getCrossingSlotsStartTimeAsLocalTime(true, Slot.SourceBucket.DAY_WISE);
         List<LocalDateTime> shiftedDayWiseCrossings = Collections.emptyList();
         if (!CollectionUtils.isEmpty(recurringDayWiseCrossings)) {
-            long offsetDays = 1;
-            if (!CollectionUtils.isEmpty(dayWiseSlotsStartTimeFromRequest) && !CollectionUtils.isEmpty(remainingDaySlotsStartTime)) {
-                offsetDays = ChronoUnit.DAYS.between(
-                        dayWiseSlotsStartTimeFromRequest.get(0).toLocalDate(),
-                        remainingDaySlotsStartTime.get(0).toLocalDate());
-            }
-            final long finalOffsetDays = offsetDays;
-            shiftedDayWiseCrossings = recurringDayWiseCrossings.stream()
-                    .map(t -> t.plusDays(finalOffsetDays))
-                    .collect(Collectors.toList());
+            shiftedDayWiseCrossings = recurringDayWiseCrossings;
             remainingDaySlotsStartTime.addAll(shiftedDayWiseCrossings);
         }
         Set<LocalDateTime> shiftedDayWiseCrossingsSet = new HashSet<>(shiftedDayWiseCrossings);
@@ -215,52 +205,23 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(orderSlots.get(0).getStartDateTime()));
             }
             else {
-                Double frequencyPerDay = drugOrder.getFrequency() != null ? drugOrder.getFrequency().getFrequencyPerDay() : null;
                 String frequency = drugOrder.getFrequency() != null ? drugOrder.getFrequency().getName() : null;
-                Map<LocalDate, List<LocalDateTime>> groupedByDateAndEpoch = orderSlots.stream()
-                        .collect(Collectors.groupingBy(
-                                obj -> obj.getStartDateTime().toLocalDate(),
-                                Collectors.mapping(
-                                        obj -> obj.getStartDateTime(),
-                                        Collectors.toList()
-                                )
-                        ));
-
-                List<List<LocalDateTime>> sortedList = groupedByDateAndEpoch.entrySet().stream()
-                        .sorted(Map.Entry.comparingByKey()) // Sort by LocalDate in ascending order
-                        .map(Map.Entry::getValue) // Get the list of Longs for each entry
-                        .collect(Collectors.toList()); // Collect the list of lists into a single ArrayList
-
-                if (frequency != null && START_TIME_FREQUENCIES.contains(frequency)) {
-                    drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(sortedList.get(0).get(0)));
-                } else if ((frequencyPerDay != null && sortedList.get(0).size() == frequencyPerDay) || (sortedList.size() == 1)) {
-                    drugOrderSchedule.setDayWiseSlotsStartTime(sortedList.get(0).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
-                } else {
-                    drugOrderSchedule.setFirstDaySlotsStartTime(sortedList.get(0).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
-                    drugOrderSchedule.setRemainingDaySlotsStartTime(sortedList.get(sortedList.size() - 1).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
-                    if (sortedList.size() > 2) {
-                        drugOrderSchedule.setDayWiseSlotsStartTime(sortedList.get(1).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
-                    }
-                }
-                List<CrossingSlotContract> crossingSlots = orderSlots.stream()
-                        .filter(slot -> slot.getSourceBucket() != null)
-                        .map(slot -> CrossingSlotContract.builder()
-                                .epoch(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slot.getStartDateTime()))
-                                .recurring(slot.getRecurringCrossing())
-                                .sourceBucket(slot.getSourceBucket())
-                                .build())
-                        .collect(Collectors.collectingAndThen(
-                                Collectors.toMap(
-                                        slot -> slot.getEpoch() + "|" + slot.getSourceBucket() + "|" + slot.getRecurring(),
-                                        slot -> slot,
-                                        (first, ignored) -> first,
-                                        LinkedHashMap::new
-                                ),
-                                map -> new ArrayList<>(map.values())
-                        ));
+                List<CrossingSlotContract> crossingSlots = extractCrossingSlots(orderSlots);
 
                 if (CollectionUtils.isEmpty(crossingSlots)) {
                     crossingSlots = readPersistedCrossingSlots(orderSlots, drugOrder.getUuid());
+                }
+
+                if (frequency != null && START_TIME_FREQUENCIES.contains(frequency)) {
+                    List<Slot> sortedSlots = orderSlots.stream()
+                            .filter(slot -> slot.getStartDateTime() != null)
+                            .sorted(Comparator.comparing(Slot::getStartDateTime))
+                            .collect(Collectors.toList());
+                    if (!CollectionUtils.isEmpty(sortedSlots)) {
+                        drugOrderSchedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(sortedSlots.get(0).getStartDateTime()));
+                    }
+                } else {
+                    applyBucketedSchedule(orderSlots, drugOrderSchedule);
                 }
 
                 drugOrderSchedule.setCrossingSlots(crossingSlots);
@@ -344,46 +305,28 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                                     s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
                     .notes(stageSlots.get(0).getNotes());
 
-            List<List<LocalDateTime>> sortedList = stageSlots.stream()
-                    .filter(slot -> slot.getStartDateTime() != null)
-                    .collect(Collectors.groupingBy(
-                            slot -> slot.getStartDateTime().toLocalDate(),
-                            TreeMap::new,
-                            Collectors.mapping(Slot::getStartDateTime, Collectors.toList())))
-                    .values()
-                    .stream()
-                    .collect(Collectors.toList());
-
-            if (!sortedList.isEmpty()) {
-                if (sortedList.size() == 1) {
-                    builder.dayWiseSlotsStartTime(sortedList.get(0).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
-                } else {
-                    builder.firstDaySlotsStartTime(sortedList.get(0).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
-                    builder.remainingDaySlotsStartTime(sortedList.get(sortedList.size() - 1).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
-                    if (sortedList.size() > 2) {
-                        builder.dayWiseSlotsStartTime(sortedList.get(1).stream().map(DateTimeUtil::convertLocalDateTimeToUTCEpoc).collect(Collectors.toList()));
-                    }
-                }
-                builder.slotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(sortedList.get(0).get(0)));
+            BucketedSlots bucketedSlots = bucketSlots(stageSlots);
+            if (bucketedSlots.slotStartTime != null) {
+                builder.slotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(bucketedSlots.slotStartTime));
+            }
+            if (!CollectionUtils.isEmpty(bucketedSlots.firstDaySlotsStartTime)) {
+                builder.firstDaySlotsStartTime(bucketedSlots.firstDaySlotsStartTime.stream()
+                        .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                        .collect(Collectors.toList()));
+            }
+            if (!CollectionUtils.isEmpty(bucketedSlots.dayWiseSlotsStartTime)) {
+                builder.dayWiseSlotsStartTime(bucketedSlots.dayWiseSlotsStartTime.stream()
+                        .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                        .collect(Collectors.toList()));
+            }
+            if (!CollectionUtils.isEmpty(bucketedSlots.remainingDaySlotsStartTime)) {
+                builder.remainingDaySlotsStartTime(bucketedSlots.remainingDaySlotsStartTime.stream()
+                        .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                        .collect(Collectors.toList()));
             }
 
             StageScheduleStatus scheduleStatus = builder.build();
-            List<CrossingSlotContract> stageCrossingSlots = stageSlots.stream()
-                    .filter(slot -> slot.getSourceBucket() != null)
-                    .map(slot -> CrossingSlotContract.builder()
-                            .epoch(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slot.getStartDateTime()))
-                            .recurring(slot.getRecurringCrossing())
-                            .sourceBucket(slot.getSourceBucket())
-                            .build())
-                    .collect(Collectors.collectingAndThen(
-                            Collectors.toMap(
-                                    slot -> slot.getEpoch() + "|" + slot.getSourceBucket() + "|" + slot.getRecurring(),
-                                    slot -> slot,
-                                    (first, ignored) -> first,
-                                    LinkedHashMap::new
-                            ),
-                            map -> new ArrayList<>(map.values())
-                    ));
+            List<CrossingSlotContract> stageCrossingSlots = extractCrossingSlots(stageSlots);
 
             stageSchedules.add(StageScheduleStatus.builder()
                     .variableDosageSequence(scheduleStatus.getVariableDosageSequence())
@@ -407,5 +350,135 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             return epochs;
         }
         return deduplicateEpochs(epochs);
+    }
+
+    private void applyBucketedSchedule(List<Slot> slots, DrugOrderSchedule schedule) {
+        BucketedSlots bucketedSlots = bucketSlots(slots);
+
+        if (bucketedSlots.slotStartTime != null) {
+            schedule.setSlotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(bucketedSlots.slotStartTime));
+        }
+        if (!CollectionUtils.isEmpty(bucketedSlots.firstDaySlotsStartTime)) {
+            schedule.setFirstDaySlotsStartTime(bucketedSlots.firstDaySlotsStartTime.stream()
+                    .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                    .collect(Collectors.toList()));
+        }
+        if (!CollectionUtils.isEmpty(bucketedSlots.dayWiseSlotsStartTime)) {
+            schedule.setDayWiseSlotsStartTime(bucketedSlots.dayWiseSlotsStartTime.stream()
+                    .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                    .collect(Collectors.toList()));
+        }
+        if (!CollectionUtils.isEmpty(bucketedSlots.remainingDaySlotsStartTime)) {
+            schedule.setRemainingDaySlotsStartTime(bucketedSlots.remainingDaySlotsStartTime.stream()
+                    .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                    .collect(Collectors.toList()));
+        }
+    }
+
+    private BucketedSlots bucketSlots(List<Slot> slots) {
+        List<Slot> sortedSlots = slots.stream()
+                .filter(slot -> slot.getStartDateTime() != null)
+                .sorted(Comparator.comparing(Slot::getStartDateTime))
+                .collect(Collectors.toList());
+
+        if (CollectionUtils.isEmpty(sortedSlots)) {
+            return BucketedSlots.empty();
+        }
+
+        Map<LocalDate, List<LocalDateTime>> nonCrossingByDate = sortedSlots.stream()
+                .filter(slot -> slot.getSourceBucket() == null)
+                .collect(Collectors.groupingBy(
+                        slot -> slot.getStartDateTime().toLocalDate(),
+                        TreeMap::new,
+                        Collectors.mapping(Slot::getStartDateTime, Collectors.toList())
+                ));
+
+        List<LocalDateTime> firstDaySlots = new ArrayList<>();
+        List<LocalDateTime> dayWiseSlots = new ArrayList<>();
+        List<LocalDateTime> remainingDaySlots = new ArrayList<>();
+
+        List<LocalDateTime> firstDayCrossings = sortedSlots.stream()
+                .filter(slot -> Slot.SourceBucket.FIRST_DAY.equals(slot.getSourceBucket()))
+                .map(Slot::getStartDateTime)
+                .sorted()
+                .collect(Collectors.toList());
+
+        List<LocalDateTime> dayWiseCrossings = sortedSlots.stream()
+                .filter(slot -> Slot.SourceBucket.DAY_WISE.equals(slot.getSourceBucket()))
+                .map(Slot::getStartDateTime)
+                .sorted()
+                .collect(Collectors.toList());
+
+        if (!nonCrossingByDate.isEmpty()) {
+            List<LocalDate> orderedDates = new ArrayList<>(nonCrossingByDate.keySet());
+            LocalDate firstDate = orderedDates.get(0);
+            LocalDate lastDate = orderedDates.get(orderedDates.size() - 1);
+
+            firstDaySlots.addAll(nonCrossingByDate.getOrDefault(firstDate, Collections.emptyList()));
+
+            if (orderedDates.size() == 1) {
+                dayWiseSlots.addAll(nonCrossingByDate.getOrDefault(firstDate, Collections.emptyList()));
+                firstDaySlots.clear();
+            } else {
+                for (int index = 1; index < orderedDates.size() - 1; index++) {
+                    dayWiseSlots.addAll(nonCrossingByDate.getOrDefault(orderedDates.get(index), Collections.emptyList()));
+                }
+                remainingDaySlots.addAll(nonCrossingByDate.getOrDefault(lastDate, Collections.emptyList()));
+            }
+        }
+
+        dayWiseSlots.addAll(firstDayCrossings);
+        remainingDaySlots.addAll(dayWiseCrossings);
+
+        Collections.sort(firstDaySlots);
+        Collections.sort(dayWiseSlots);
+        Collections.sort(remainingDaySlots);
+
+        return new BucketedSlots(
+                sortedSlots.get(0).getStartDateTime(),
+                firstDaySlots,
+                dayWiseSlots,
+                remainingDaySlots
+        );
+    }
+
+    private List<CrossingSlotContract> extractCrossingSlots(List<Slot> slots) {
+        return slots.stream()
+                .filter(slot -> slot.getSourceBucket() != null)
+                .map(slot -> CrossingSlotContract.builder()
+                        .epoch(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slot.getStartDateTime()))
+                        .recurring(slot.getRecurringCrossing())
+                        .sourceBucket(slot.getSourceBucket())
+                        .build())
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toMap(
+                                slot -> slot.getEpoch() + "|" + slot.getSourceBucket() + "|" + slot.getRecurring(),
+                                slot -> slot,
+                                (first, ignored) -> first,
+                                LinkedHashMap::new
+                        ),
+                        map -> new ArrayList<>(map.values())
+                ));
+    }
+
+    private static class BucketedSlots {
+        private final LocalDateTime slotStartTime;
+        private final List<LocalDateTime> firstDaySlotsStartTime;
+        private final List<LocalDateTime> dayWiseSlotsStartTime;
+        private final List<LocalDateTime> remainingDaySlotsStartTime;
+
+        private BucketedSlots(LocalDateTime slotStartTime,
+                              List<LocalDateTime> firstDaySlotsStartTime,
+                              List<LocalDateTime> dayWiseSlotsStartTime,
+                              List<LocalDateTime> remainingDaySlotsStartTime) {
+            this.slotStartTime = slotStartTime;
+            this.firstDaySlotsStartTime = firstDaySlotsStartTime;
+            this.dayWiseSlotsStartTime = dayWiseSlotsStartTime;
+            this.remainingDaySlotsStartTime = remainingDaySlotsStartTime;
+        }
+
+        private static BucketedSlots empty() {
+            return new BucketedSlots(null, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        }
     }
 }
