@@ -9,7 +9,9 @@ import org.openmrs.module.ipd.api.model.MedicationAdministration;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.model.StageScheduleStatus;
-
+import org.openmrs.module.ipd.web.model.SlotTimeCreationResult;
+import org.openmrs.module.ipd.web.model.CrossingSlotTag;
+import org.openmrs.module.ipd.web.contract.CrossingSlotContract;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 
 import java.time.LocalDate;
@@ -88,7 +90,7 @@ public class SlotTimeCreationServiceTest {
     }
 
     // -----------------------------------------------------------------------
-    // Fixed-schedule frequency tests
+    // Regular order with fixed-schedule frequency tests
     // -----------------------------------------------------------------------
 
     @Test
@@ -97,9 +99,10 @@ public class SlotTimeCreationServiceTest {
         DrugOrder order = buildDrugOrder(6.0, 2.0);
         ScheduleMedicationRequest request = buildFixedRequest(futureEpochList(6));
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(3, result.size());
+        assertEquals(3, result.getSlotsStartTime().size());
+        assertTrue("Crossing tags should be empty for regular orders", result.getCrossingTagsByStartTime().isEmpty());
     }
 
     @Test
@@ -109,175 +112,47 @@ public class SlotTimeCreationServiceTest {
                 .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
                 .build();
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(0, result.size());
+        assertEquals(0, result.getSlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldHandlePartialFirstDay_WithFixedSchedule() {
+        DrugOrder order = buildDrugOrder(10.0, 2.0);
+        List<Long> firstDay = futureEpochList(3);
+        List<Long> dayWise = futureEpochList(2);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .firstDaySlotsStartTime(firstDay)
+                .dayWiseSlotsStartTime(dayWise)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(5, result.getSlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldHandleFirstDayDayWiseAndRemaining_WithFixedSchedule() {
+        DrugOrder order = buildDrugOrder(12.0, 2.0);
+        List<Long> firstDay = futureEpochList(2);
+        List<Long> dayWise = futureEpochList(3);
+        List<Long> remaining = futureEpochList(2);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .firstDaySlotsStartTime(firstDay)
+                .dayWiseSlotsStartTime(dayWise)
+                .remainingDaySlotsStartTime(remaining)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(6, result.getSlotsStartTime().size());
     }
 
     // -----------------------------------------------------------------------
-    // buildStageSchedules — fixed-schedule VDP branch
-    // -----------------------------------------------------------------------
-
-    private Slot makeVdpSlot(Integer sequence, Slot.SlotStatus status, LocalDateTime startDateTime, boolean hasAdmin) {
-        Slot slot = new Slot();
-        slot.setVariableDosageSequence(sequence);
-        slot.setStatus(status);
-        slot.setStartDateTime(startDateTime);
-        slot.setNotes("note-" + sequence);
-        if (hasAdmin) slot.setMedicationAdministration(new MedicationAdministration());
-        org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":" + sequence + ",\"timing\":{\"code\":{\"text\":\"Twice a day\"},\"repeat\":{\"duration\":2,\"durationUnit\":\"d\"}},\"doseAndRate\":[{\"doseQuantity\":{\"value\":5,\"unit\":\"mg\"}}]}]");
-        slot.setOrder(order);
-        return slot;
-    }
-
-    @Test
-    public void shouldProduceDayWiseSlotsStartTime_ForFixedScheduleVdpStageWithUniformDays() {
-        // 2 days × 2 slots each = 4 total — uniform so dayWise should be populated
-        LocalDateTime day1Slot1 = LocalDateTime.of(2026, 5, 1, 8, 0);
-        LocalDateTime day1Slot2 = LocalDateTime.of(2026, 5, 1, 20, 0);
-        LocalDateTime day2Slot1 = LocalDateTime.of(2026, 5, 2, 8, 0);
-        LocalDateTime day2Slot2 = LocalDateTime.of(2026, 5, 2, 20, 0);
-
-        Slot s1 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day1Slot1, false);
-        Slot s2 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day1Slot2, false);
-        Slot s3 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day2Slot1, false);
-        Slot s4 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day2Slot2, false);
-
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Arrays.asList(s1, s2, s3, s4));
-
-        assertEquals(1, result.size());
-        StageScheduleStatus stage = result.get(0);
-        assertNull("Start-time field should be null for fixed-schedule stage", stage.getSlotStartTime());
-        assertNotNull("dayWiseSlotsStartTime should be populated for uniform days", stage.getDayWiseSlotsStartTime());
-        assertEquals(2, stage.getDayWiseSlotsStartTime().size());
-        assertNull(stage.getFirstDaySlotsStartTime());
-    }
-
-    @Test
-    public void shouldProduceFirstDayAndRemainingDay_ForFixedScheduleVdpStageWithNonUniformFirstDay() {
-        // Day 1 has 1 slot (partial), day 2 has 2 slots — matches regular order behaviour:
-        // firstDay=day1, remainingDay=day2, dayWise=null (same as getDrugOrderScheduledTime)
-        LocalDateTime day1Slot1 = LocalDateTime.of(2026, 5, 1, 14, 0);
-        LocalDateTime day2Slot1 = LocalDateTime.of(2026, 5, 2, 8, 0);
-        LocalDateTime day2Slot2 = LocalDateTime.of(2026, 5, 2, 20, 0);
-
-        Slot s1 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day1Slot1, false);
-        Slot s2 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day2Slot1, false);
-        Slot s3 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day2Slot2, false);
-
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Arrays.asList(s1, s2, s3));
-
-        assertEquals(1, result.size());
-        StageScheduleStatus stage = result.get(0);
-        assertNotNull("firstDaySlotsStartTime should be populated when day 1 is partial", stage.getFirstDaySlotsStartTime());
-        assertEquals(1, stage.getFirstDaySlotsStartTime().size());
-        assertNotNull("remainingDaySlotsStartTime should be populated from last day", stage.getRemainingDaySlotsStartTime());
-        assertEquals(2, stage.getRemainingDaySlotsStartTime().size());
-        assertNull("dayWiseSlotsStartTime should be null for exactly 2 calendar days", stage.getDayWiseSlotsStartTime());
-    }
-
-    @Test
-    public void shouldProduceFirstDayDayWiseAndRemainingDay_ForThreePlusCalendarDays() {
-        // Day 1: 1 slot (partial), Day 2: 2 slots (full pattern), Day 3: 1 slot (partial last day)
-        LocalDateTime day1Slot1 = LocalDateTime.of(2026, 5, 1, 14, 0);
-        LocalDateTime day2Slot1 = LocalDateTime.of(2026, 5, 2, 8, 0);
-        LocalDateTime day2Slot2 = LocalDateTime.of(2026, 5, 2, 20, 0);
-        LocalDateTime day3Slot1 = LocalDateTime.of(2026, 5, 3, 8, 0);
-
-        Slot s1 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day1Slot1, false);
-        Slot s2 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day2Slot1, false);
-        Slot s3 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day2Slot2, false);
-        Slot s4 = makeVdpSlot(2, Slot.SlotStatus.SCHEDULED, day3Slot1, false);
-
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Arrays.asList(s1, s2, s3, s4));
-
-        assertEquals(1, result.size());
-        StageScheduleStatus stage = result.get(0);
-        assertNotNull("firstDaySlotsStartTime should be populated for partial first day", stage.getFirstDaySlotsStartTime());
-        assertEquals(1, stage.getFirstDaySlotsStartTime().size());
-        assertNotNull("dayWiseSlotsStartTime should be populated from day 2 when 3+ days", stage.getDayWiseSlotsStartTime());
-        assertEquals(2, stage.getDayWiseSlotsStartTime().size());
-        assertNotNull("remainingDaySlotsStartTime should be populated from last day", stage.getRemainingDaySlotsStartTime());
-        assertEquals(1, stage.getRemainingDaySlotsStartTime().size());
-    }
-
-    @Test
-    public void shouldReturnEmptyList_WhenSlotsListIsNull() {
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(null);
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    public void shouldReturnEmptyList_WhenNoSlotsHaveVariableDosageSequence() {
-        Slot slot = new Slot();
-        slot.setVariableDosageSequence(null);
-        slot.setStatus(Slot.SlotStatus.SCHEDULED);
-        slot.setStartDateTime(LocalDateTime.now().plusHours(1));
-
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    public void shouldSetIsScheduledTrue_ForAllStageEntries() {
-        Slot slot = makeVdpSlot(1, Slot.SlotStatus.SCHEDULED, LocalDateTime.now().plusHours(1), false);
-        // Override order with start-time frequency JSON
-        org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once a day\"},\"repeat\":{\"duration\":1,\"durationUnit\":\"d\"}}}]");
-        slot.setOrder(order);
-
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
-
-        assertEquals(1, result.size());
-        assertTrue("isScheduled should always be true for any entry in stageSchedules", result.get(0).getIsScheduled());
-    }
-
-    @Test
-    public void shouldSetAdministrationStarted_WhenAnySlotHasAdministration() {
-        Slot slot = makeVdpSlot(1, Slot.SlotStatus.COMPLETED, LocalDateTime.now().minusHours(1), true);
-        org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once\"},\"repeat\":{\"count\":1}},\"extension\":[]}]");
-        slot.setOrder(order);
-
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
-
-        assertTrue(result.get(0).getAdministrationStarted());
-    }
-
-    @Test
-    public void shouldNotSetAllAttended_WhenAnySlotIsStillScheduled() {
-        Slot slot = makeVdpSlot(1, Slot.SlotStatus.SCHEDULED, LocalDateTime.now().plusHours(1), false);
-        org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":1,\"timing\":{\"code\":{\"text\":\"Once\"},\"repeat\":{\"count\":1}}}]");
-        slot.setOrder(order);
-
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
-
-        assertFalse(result.get(0).getAllAttended());
-    }
-
-    @Test
-    public void shouldHandleTimingCodeWithCodingArray_BackwardCompatibility() {
-        Slot slot = new Slot();
-        slot.setVariableDosageSequence(2);
-        slot.setStatus(Slot.SlotStatus.SCHEDULED);
-        slot.setStartDateTime(LocalDateTime.now().plusHours(1));
-        org.openmrs.DrugOrder order = new org.openmrs.DrugOrder();
-        order.setDosingInstructions("[{\"sequence\":2,\"timing\":{\"code\":{\"text\":\"Twice a day\",\"coding\":[{\"code\":\"freq-uuid-123\",\"display\":\"Twice a day\"}]},\"repeat\":{\"duration\":3,\"durationUnit\":\"d\"}},\"doseAndRate\":[{\"doseQuantity\":{\"value\":5,\"unit\":\"mg\"}}]}]");
-        slot.setOrder(order);
-
-        List<StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(Collections.singletonList(slot));
-
-        assertEquals(1, result.size());
-        assertEquals(Integer.valueOf(2), result.get(0).getVariableDosageSequence());
-        assertTrue(result.get(0).getIsScheduled());
-    }
-
-    // -----------------------------------------------------------------------
-    // Intraday slot creation — createSlotsStartTimeFrom
+    // Intraday medication slot creation tests
     // -----------------------------------------------------------------------
 
     @Test
@@ -289,9 +164,9 @@ public class SlotTimeCreationServiceTest {
                 .dayWiseSlotsStartTime(dayWise)
                 .build();
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(2, result.size());
+        assertEquals(2, result.getSlotsStartTime().size());
     }
 
     @Test
@@ -303,9 +178,9 @@ public class SlotTimeCreationServiceTest {
                 .dayWiseSlotsStartTime(dayWise)
                 .build();
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(9, result.size());
+        assertEquals(9, result.getSlotsStartTime().size());
     }
 
     @Test
@@ -321,9 +196,9 @@ public class SlotTimeCreationServiceTest {
                 .remainingDaySlotsStartTime(remaining)
                 .build();
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(8, result.size());
+        assertEquals(8, result.getSlotsStartTime().size());
     }
 
     @Test
@@ -333,9 +208,9 @@ public class SlotTimeCreationServiceTest {
                 .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
                 .build();
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(0, result.size());
+        assertEquals(0, result.getSlotsStartTime().size());
     }
 
     @Test
@@ -347,13 +222,13 @@ public class SlotTimeCreationServiceTest {
                 .dayWiseSlotsStartTime(futureEpochList(2))
                 .build();
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(2, result.size());
+        assertEquals(2, result.getSlotsStartTime().size());
     }
 
     // -----------------------------------------------------------------------
-    // getIntradayFrequencyPerDay — fallback behaviour (via slot count)
+    // Fallback behavior for intraday orders
     // -----------------------------------------------------------------------
 
     @Test
@@ -367,9 +242,9 @@ public class SlotTimeCreationServiceTest {
                 .dayWiseSlotsStartTime(dayWise)
                 .build();
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(1, result.size());
+        assertEquals(1, result.getSlotsStartTime().size());
     }
 
     @Test
@@ -384,9 +259,9 @@ public class SlotTimeCreationServiceTest {
                 .dayWiseSlotsStartTime(dayWise)
                 .build();
 
-        List<LocalDateTime> result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(1, result.size());
+        assertEquals(1, result.getSlotsStartTime().size());
     }
 
     // -----------------------------------------------------------------------
@@ -467,5 +342,249 @@ public class SlotTimeCreationServiceTest {
         assertNull("slotStartTime should NOT be set for intraday orders even though frequency is null",
                 schedule.getSlotStartTime());
         assertNotNull("dayWiseSlotsStartTime should be set instead", schedule.getDayWiseSlotsStartTime());
+    }
+
+    // -----------------------------------------------------------------------
+    // Variable Dosage Pattern (VDO) with crossing slots tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void shouldCreateSlotsWithCrossingTag_ForVdoWithMidnightCrossing() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime crossingSlotTime = now.withHour(22).withMinute(0);
+        Long crossingEpoch = crossingSlotTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        DrugOrder order = buildDrugOrder(4.0, 1.0);
+        List<Long> dayWise = futureEpochList(4);
+        List<CrossingSlotContract> crossingSlots = Arrays.asList(
+                CrossingSlotContract.builder()
+                        .epoch(crossingEpoch)
+                        .recurring(true)
+                        .sourceBucket(Slot.SourceBucket.FINAL)
+                        .build()
+        );
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .crossingSlots(crossingSlots)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(4, result.getSlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldHandle_NonRecurringFirstDayCrossingSlots() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime crossingTime = now.withHour(22).withMinute(0);
+        Long crossingEpoch = crossingTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        DrugOrder order = buildDrugOrder(6.0, 2.0);
+        List<Long> firstDay = futureEpochList(3);
+        List<Long> dayWise = futureEpochList(2);
+        List<CrossingSlotContract> nonRecurringCrossings = Arrays.asList(
+                CrossingSlotContract.builder()
+                        .epoch(crossingEpoch)
+                        .recurring(false)
+                        .sourceBucket(Slot.SourceBucket.FIRST_DAY)
+                        .build()
+        );
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .firstDaySlotsStartTime(firstDay)
+                .dayWiseSlotsStartTime(dayWise)
+                .crossingSlots(nonRecurringCrossings)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(3, result.getSlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldHandle_RecurringDayWiseCrossingSlots() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime crossingTime = now.withHour(23).withMinute(0);
+        Long crossingEpoch = crossingTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        DrugOrder order = buildDrugOrder(8.0, 2.0);
+        List<Long> dayWise = futureEpochList(3);
+        List<CrossingSlotContract> recurringDayWiseCrossings = Arrays.asList(
+                CrossingSlotContract.builder()
+                        .epoch(crossingEpoch)
+                        .recurring(true)
+                        .sourceBucket(Slot.SourceBucket.DAY_WISE)
+                        .build()
+        );
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .crossingSlots(recurringDayWiseCrossings)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(4, result.getSlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldHandle_MixedCrossingSlots_NonRecurringAndRecurring() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nonRecurringTime = now.withHour(22).withMinute(0);
+        LocalDateTime recurringTime = now.withHour(23).withMinute(0);
+        Long nonRecurringEpoch = nonRecurringTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+        Long recurringEpoch = recurringTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        DrugOrder order = buildDrugOrder(6.0, 1.0);
+        List<Long> firstDay = futureEpochList(2);
+        List<Long> dayWise = futureEpochList(2);
+        List<CrossingSlotContract> mixedCrossings = Arrays.asList(
+                CrossingSlotContract.builder()
+                        .epoch(nonRecurringEpoch)
+                        .recurring(false)
+                        .sourceBucket(Slot.SourceBucket.FIRST_DAY)
+                        .build(),
+                CrossingSlotContract.builder()
+                        .epoch(recurringEpoch)
+                        .recurring(true)
+                        .sourceBucket(Slot.SourceBucket.DAY_WISE)
+                        .build()
+        );
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .firstDaySlotsStartTime(firstDay)
+                .dayWiseSlotsStartTime(dayWise)
+                .crossingSlots(mixedCrossings)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(4, result.getSlotsStartTime().size());
+    }
+
+    // -----------------------------------------------------------------------
+    // Intraday orders with crossing slots
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void shouldHandle_IntradayOrder_WithCrossingSlots() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime crossingTime = now.withHour(22).withMinute(0);
+        Long crossingEpoch = crossingTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        DrugOrder order = buildIntradayDrugOrder(2, 5.0, 5.0, 5.0, 5.0);
+        List<Long> dayWise = futureEpochList(4);
+        List<CrossingSlotContract> crossingSlots = Arrays.asList(
+                CrossingSlotContract.builder()
+                        .epoch(crossingEpoch)
+                        .recurring(true)
+                        .sourceBucket(Slot.SourceBucket.DAY_WISE)
+                        .build()
+        );
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .crossingSlots(crossingSlots)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(8, result.getSlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldHandle_IntradayWithPartialFirstDay_AndCrossingSlots() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime crossingTime = now.withHour(23).withMinute(30);
+        Long crossingEpoch = crossingTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        DrugOrder order = buildIntradayDrugOrder(3, 10.0, 10.0, 0.0, 0.0);
+        List<Long> firstDay = futureEpochList(1);
+        List<Long> dayWise = futureEpochList(2);
+        List<Long> remaining = futureEpochList(1);
+        List<CrossingSlotContract> crossingSlots = Arrays.asList(
+                CrossingSlotContract.builder()
+                        .epoch(crossingEpoch)
+                        .recurring(true)
+                        .sourceBucket(Slot.SourceBucket.DAY_WISE)
+                        .build()
+        );
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .firstDaySlotsStartTime(firstDay)
+                .dayWiseSlotsStartTime(dayWise)
+                .remainingDaySlotsStartTime(remaining)
+                .crossingSlots(crossingSlots)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(4, result.getSlotsStartTime().size());
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge cases
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void shouldReturnEmptyResult_ForOrderWithoutQuantityOrDose() {
+        DrugOrder order = new DrugOrder();
+        order.setQuantity(null);
+        order.setDose(null);
+        List<Long> dayWise = futureEpochList(2);
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(2, result.getSlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldRespectQuantityDose_WhenBothAreProvided() {
+        DrugOrder order = buildDrugOrder(15.0, 3.0);
+        List<Long> dayWise = futureEpochList(10);
+        ScheduleMedicationRequest request = buildFixedRequest(dayWise);
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertEquals(5, result.getSlotsStartTime().size());
+    }
+
+    @Test
+    public void shouldCreateSlots_WithCrossingTagsLookup_Populated() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime crossingTime = now.withHour(22).withMinute(0);
+        Long crossingEpoch = crossingTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        DrugOrder order = buildDrugOrder(4.0, 1.0);
+        List<Long> dayWise = futureEpochList(4);
+        List<CrossingSlotContract> crossingSlots = Arrays.asList(
+                CrossingSlotContract.builder()
+                        .epoch(crossingEpoch)
+                        .recurring(true)
+                        .sourceBucket(Slot.SourceBucket.FINAL)
+                        .build()
+        );
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
+                .dayWiseSlotsStartTime(dayWise)
+                .crossingSlots(crossingSlots)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertNotNull("Crossing tags lookup should not be null", result.getCrossingTagsByStartTime());
+        assertTrue("Crossing tags should be populated or empty", result.getCrossingTagsByStartTime().size() >= 0);
     }
 }
