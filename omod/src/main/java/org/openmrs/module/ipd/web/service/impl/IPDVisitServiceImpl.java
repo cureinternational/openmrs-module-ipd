@@ -64,28 +64,28 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         this.slotService = slotService;
     }
 
-  @Override
-public List<IPDDrugOrder> getPrescribedOrders(String visitUuid, Boolean includeActiveVisit, Integer numberOfVisits, Date startDate, Date endDate, Boolean getEffectiveOrdersOnly) {
-    List<String> visitUuidsList = new ArrayList<>();
-    visitUuidsList.add(visitUuid);
-    Visit visit = visitService.getVisitByUuid(visitUuid);
-    if (visit == null) return Collections.emptyList();
+    @Override
+    public List<IPDDrugOrder> getPrescribedOrders(String visitUuid, Boolean includeActiveVisit, Integer numberOfVisits, Date startDate, Date endDate, Boolean getEffectiveOrdersOnly) {
+        List<String> visitUuidsList = new ArrayList<>();
+        visitUuidsList.add(visitUuid);
+        Visit visit = visitService.getVisitByUuid(visitUuid);
+        if (visit == null) return Collections.emptyList();
 
-    visitUuidsList.addAll(getPrecedingVisitUuids(visit.getPatient(), visitUuid));
+        visitUuidsList.addAll(getPrecedingVisitUuids(visit.getPatient(), visitUuid));
 
-    List<DrugOrder> prescribedDrugOrders = drugOrderService.getPrescribedDrugOrders(
-            visitUuidsList,
-            visit.getPatient().getUuid(),
-            includeActiveVisit,
-            numberOfVisits,
-            startDate,
-            endDate,
-            getEffectiveOrdersOnly
-    );
-    return getIPDDrugOrders(visit.getPatient().getUuid(), prescribedDrugOrders, visit);
-}
+        List<DrugOrder> prescribedDrugOrders = drugOrderService.getPrescribedDrugOrders(
+                visitUuidsList,
+                visit.getPatient().getUuid(),
+                includeActiveVisit,
+                numberOfVisits,
+                startDate,
+                endDate,
+                getEffectiveOrdersOnly
+        );
+        return getIPDDrugOrders(visit.getPatient().getUuid(), prescribedDrugOrders, visit);
+    }
 
-    private List<IPDDrugOrder> getIPDDrugOrders(String patientUuid, List<DrugOrder> drugOrders,Visit currentVisit) {
+    private List<IPDDrugOrder> getIPDDrugOrders(String patientUuid, List<DrugOrder> drugOrders, Visit currentVisit) {
         Map<String, DrugOrder> drugOrderMap = drugOrderService.getDiscontinuedDrugOrders(drugOrders);
         // filter drug orders where its stop date is after current visit start Date
         List<DrugOrder> drugOrdersFiltered = drugOrders.stream()
@@ -188,8 +188,7 @@ public List<IPDDrugOrder> getPrescribedOrders(String visitUuid, Boolean includeA
                 .orElse(-1);
 
         if (currentVisitIndex == -1) return result;
-
-        final Set<String> OUTPATIENT_VISIT_TYPES =new HashSet<>(Arrays.asList("OPD", "In Absentia", "LAB VISIT"));
+        final Set<String> OUTPATIENT_VISIT_TYPES = new HashSet<>(Arrays.asList("OPD", "In Absentia", "LAB VISIT"));       
         boolean foundClosedIPD = false;
         for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
             Visit v = sortedVisits.get(i);
