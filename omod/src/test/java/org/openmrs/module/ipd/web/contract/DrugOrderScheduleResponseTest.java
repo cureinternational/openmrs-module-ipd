@@ -45,8 +45,7 @@ public class DrugOrderScheduleResponseTest {
     private DrugOrderSchedule makeSchedule(List<Slot> slots) {
         DrugOrderSchedule schedule = new DrugOrderSchedule();
         schedule.setSlots(slots);
-        // buildStageSchedules is private; use an empty list for now
-        schedule.setStageSchedules(Collections.emptyList());
+        schedule.setStageSchedules(slotTimeCreationService.buildStageSchedules(slots));
         return schedule;
     }
 

@@ -3,6 +3,7 @@ package org.openmrs.module.ipd.web.service.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmrs.*;
+import org.openmrs.api.APIException;
 import org.openmrs.api.ConceptService;
 import org.openmrs.api.OrderService;
 import org.openmrs.api.PatientService;
@@ -17,6 +18,7 @@ import org.openmrs.module.ipd.api.service.ReferenceService;
 import org.openmrs.module.ipd.api.service.ScheduleService;
 import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
+import org.openmrs.module.ipd.api.util.IPDConstants;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.ScheduleFactory;
 import org.openmrs.module.ipd.web.factory.SlotFactory;
@@ -86,7 +88,7 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
                 stageAlreadyScheduled = existingSlots != null && !existingSlots.isEmpty();
             }
             if (stageAlreadyScheduled) {
-                throw new RuntimeException("Slots already created for this drug order");
+                throw new APIException("Slots already created for this drug order");
             }
             SlotTimeCreationResult slotTimeCreationResult = slotTimeCreationService.createSlotsStartTimeFrom(scheduleMedicationRequest, order);
             List<Slot> slots = slotFactory.createSlotsForMedicationFrom(
@@ -149,7 +151,7 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
         voidExistingMedicationSlotsForOrder(
                 scheduleMedicationRequest.getPatientUuid(),
                 scheduleMedicationRequest.getOrderUuid(),
-                "",
+                IPDConstants.EDIT_DRUG_CHART_VOID_REASON,
                 scheduleMedicationRequest.getVariableDosageSequence());
         return saveMedicationSchedule(scheduleMedicationRequest);
     }

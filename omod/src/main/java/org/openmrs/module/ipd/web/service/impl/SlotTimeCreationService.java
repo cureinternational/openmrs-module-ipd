@@ -1,6 +1,7 @@
 package org.openmrs.module.ipd.web.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmrs.DrugOrder;
 import org.openmrs.api.impl.BaseOpenmrsService;
@@ -278,7 +279,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         }
     }
 
-    private List<StageScheduleStatus> buildStageSchedules(List<Slot> orderSlots) {
+    public List<StageScheduleStatus> buildStageSchedules(List<Slot> orderSlots) {
         Map<Integer, List<Slot>> slotsBySequence = orderSlots.stream()
                 .filter(slot -> slot.getVariableDosageSequence() != null)
                 .collect(Collectors.groupingBy(Slot::getVariableDosageSequence, TreeMap::new, Collectors.toList()));
@@ -305,24 +306,33 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                                     s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
                     .notes(stageSlots.get(0).getNotes());
 
-            BucketedSlots bucketedSlots = bucketSlots(stageSlots);
-            if (bucketedSlots.slotStartTime != null) {
-                builder.slotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(bucketedSlots.slotStartTime));
-            }
-            if (!CollectionUtils.isEmpty(bucketedSlots.firstDaySlotsStartTime)) {
-                builder.firstDaySlotsStartTime(bucketedSlots.firstDaySlotsStartTime.stream()
+            if (isStartTimeFrequencyForStage(stageSlots.get(0), sequence)) {
+                stageSlots.stream()
+                        .filter(slot -> slot.getStartDateTime() != null)
+                        .map(Slot::getStartDateTime)
+                        .min(Comparator.naturalOrder())
                         .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
-                        .collect(Collectors.toList()));
-            }
-            if (!CollectionUtils.isEmpty(bucketedSlots.dayWiseSlotsStartTime)) {
-                builder.dayWiseSlotsStartTime(bucketedSlots.dayWiseSlotsStartTime.stream()
-                        .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
-                        .collect(Collectors.toList()));
-            }
-            if (!CollectionUtils.isEmpty(bucketedSlots.remainingDaySlotsStartTime)) {
-                builder.remainingDaySlotsStartTime(bucketedSlots.remainingDaySlotsStartTime.stream()
-                        .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
-                        .collect(Collectors.toList()));
+                        .ifPresent(builder::slotStartTime);
+            } else {
+                BucketedSlots bucketedSlots = bucketSlots(stageSlots);
+                if (bucketedSlots.slotStartTime != null) {
+                    builder.slotStartTime(DateTimeUtil.convertLocalDateTimeToUTCEpoc(bucketedSlots.slotStartTime));
+                }
+                if (!CollectionUtils.isEmpty(bucketedSlots.firstDaySlotsStartTime)) {
+                    builder.firstDaySlotsStartTime(bucketedSlots.firstDaySlotsStartTime.stream()
+                            .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                            .collect(Collectors.toList()));
+                }
+                if (!CollectionUtils.isEmpty(bucketedSlots.dayWiseSlotsStartTime)) {
+                    builder.dayWiseSlotsStartTime(bucketedSlots.dayWiseSlotsStartTime.stream()
+                            .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                            .collect(Collectors.toList()));
+                }
+                if (!CollectionUtils.isEmpty(bucketedSlots.remainingDaySlotsStartTime)) {
+                    builder.remainingDaySlotsStartTime(bucketedSlots.remainingDaySlotsStartTime.stream()
+                            .map(DateTimeUtil::convertLocalDateTimeToUTCEpoc)
+                            .collect(Collectors.toList()));
+                }
             }
 
             StageScheduleStatus scheduleStatus = builder.build();
@@ -350,6 +360,34 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             return epochs;
         }
         return deduplicateEpochs(epochs);
+    }
+
+    private boolean isStartTimeFrequencyForStage(Slot slot, Integer sequence) {
+        try {
+            DrugOrder drugOrder = (DrugOrder) slot.getOrder();
+            if (drugOrder == null || drugOrder.getDosingInstructions() == null) {
+                return true;
+            }
+
+            JsonNode dosages = objectMapper.readTree(drugOrder.getDosingInstructions());
+            if (!dosages.isArray()) {
+                return true;
+            }
+
+            for (JsonNode dosage : dosages) {
+                if (dosage.path("sequence").asInt() != sequence) {
+                    continue;
+                }
+                if (dosage.path("timing").path("repeat").path("count").asInt(0) == 1) {
+                    return true;
+                }
+
+                String frequencyName = dosage.path("timing").path("code").path("text").asText(null);
+                return START_TIME_FREQUENCIES.contains(frequencyName);
+            }
+        } catch (Exception ignored) {
+        }
+        return true;
     }
 
     private void applyBucketedSchedule(List<Slot> slots, DrugOrderSchedule schedule) {
