@@ -24,6 +24,7 @@ import org.openmrs.module.ipd.api.service.ScheduleService;
 import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.SlotFactory;
+import org.openmrs.module.ipd.web.model.SlotTimeCreationResult;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -85,7 +86,7 @@ public class IPDScheduleServiceImplTest {
         when(referenceService.getReferenceByTypeAndTargetUUID(Patient.class.getTypeName(), "patient-uuid"))
                 .thenReturn(Optional.of(patientReference));
         when(slotTimeCreationService.createSlotsStartTimeFrom(any(), any()))
-                .thenReturn(Collections.emptyList());
+                .thenReturn(SlotTimeCreationResult.withoutCrossingTags(Collections.emptyList()));
     }
 
     @Test
