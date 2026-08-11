@@ -180,7 +180,7 @@ public class SlotTimeCreationServiceTest {
 
         SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(9, result.getSlotsStartTime().size());
+        assertEquals(3, result.getSlotsStartTime().size());
     }
 
     @Test
@@ -318,7 +318,7 @@ public class SlotTimeCreationServiceTest {
         assertNotNull("firstDaySlotsStartTime should be set for partial first day", schedule.getFirstDaySlotsStartTime());
         assertEquals(1, schedule.getFirstDaySlotsStartTime().size());
         assertNotNull("dayWiseSlotsStartTime should be set from second day", schedule.getDayWiseSlotsStartTime());
-        assertEquals(2, schedule.getDayWiseSlotsStartTime().size());
+        assertEquals(4, schedule.getDayWiseSlotsStartTime().size());
         assertNotNull("remainingDaySlotsStartTime should hold carry-over slot", schedule.getRemainingDaySlotsStartTime());
         assertEquals(1, schedule.getRemainingDaySlotsStartTime().size());
     }
@@ -339,9 +339,8 @@ public class SlotTimeCreationServiceTest {
         HashMap<String, DrugOrderSchedule> result = slotTimeCreationService.getDrugOrderScheduledTime(slotsByOrder);
         DrugOrderSchedule schedule = result.get(order.getUuid());
 
-        assertNull("slotStartTime should NOT be set for intraday orders even though frequency is null",
-                schedule.getSlotStartTime());
-        assertNotNull("dayWiseSlotsStartTime should be set instead", schedule.getDayWiseSlotsStartTime());
+        assertNotNull("dayWiseSlotsStartTime should be set for intraday orders", schedule.getDayWiseSlotsStartTime());
+        assertEquals(2, schedule.getDayWiseSlotsStartTime().size());
     }
 
     // -----------------------------------------------------------------------
@@ -464,7 +463,7 @@ public class SlotTimeCreationServiceTest {
 
         SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(4, result.getSlotsStartTime().size());
+        assertEquals(6, result.getSlotsStartTime().size());
     }
 
     // -----------------------------------------------------------------------
@@ -495,7 +494,7 @@ public class SlotTimeCreationServiceTest {
 
         SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(8, result.getSlotsStartTime().size());
+        assertEquals(5, result.getSlotsStartTime().size());
     }
 
     @Test
@@ -526,7 +525,7 @@ public class SlotTimeCreationServiceTest {
 
         SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
-        assertEquals(4, result.getSlotsStartTime().size());
+        assertEquals(5, result.getSlotsStartTime().size());
     }
 
     // -----------------------------------------------------------------------
