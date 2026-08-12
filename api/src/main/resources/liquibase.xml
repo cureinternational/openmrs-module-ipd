@@ -24,6 +24,7 @@
             <column name="start_date" type="DATETIME"> <constraints nullable="false"/> </column>
             <column name="end_date" type="DATETIME"> <constraints nullable="false"/> </column>
             <column name="comments" type="varchar(255)" />
+            <column name="update_complete_schedule" type="BOOLEAN"><constraints nullable="true" /></column>
             <column name="creator" type="int"> <constraints nullable="false"/> </column>
             <column name="date_created" type="DATETIME"> <constraints nullable="false"/> </column>
             <column name="changed_by" type="int"/>
@@ -217,6 +218,14 @@
         <sql>
             ALTER TABLE ipd_schedule MODIFY COLUMN end_date datetime NULL;
         </sql>
+    </changeSet>
+
+    <changeSet id="add_update_complete_schedule_ipd_schedule_202608130418" author="copilot">
+        <addColumn tableName="ipd_schedule">
+            <column name="update_complete_schedule" type="BOOLEAN">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
     </changeSet>
 
     <changeSet id="add_medication_administration_id_202312141530" author="Bahmni">

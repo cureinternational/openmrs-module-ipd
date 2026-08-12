@@ -22,7 +22,7 @@ import org.openmrs.module.ipd.api.util.IPDConstants;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.ScheduleFactory;
 import org.openmrs.module.ipd.web.factory.SlotFactory;
-import org.openmrs.module.ipd.web.model.CrossingSlotTag;
+import org.openmrs.module.ipd.web.model.SlotCrossingMetadata;
 import org.openmrs.module.ipd.web.model.PrescribedOrderSlotSummary;
 import org.openmrs.module.ipd.web.model.PatientMedicationSummary;
 import org.openmrs.module.ipd.web.model.SlotTimeCreationResult;
@@ -164,15 +164,15 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
                 .forEach(slot -> slotService.voidSlot(slot,voidReason));
     }
 
-    private void tagCrossingSlots(List<Slot> slots, Map<LocalDateTime, CrossingSlotTag> crossingTagsByStartTime) {
+    private void tagCrossingSlots(List<Slot> slots, Map<LocalDateTime, SlotCrossingMetadata> crossingTagsByStartTime) {
         if (crossingTagsByStartTime == null || crossingTagsByStartTime.isEmpty()) {
             return;
         }
         slots.forEach(slot -> {
-            CrossingSlotTag tag = crossingTagsByStartTime.get(slot.getStartDateTime());
+            SlotCrossingMetadata tag = crossingTagsByStartTime.get(slot.getStartDateTime());
             if (tag != null) {
-                slot.setSourceBucket(tag.getSourceBucket());
-                slot.setRecurringCrossing(tag.getRecurring());
+                slot.setOriginDoseBucket(tag.getOriginDoseBucket());
+                slot.setIsRecurringAcrossDays(tag.getIsRecurringAcrossDays());
             }
         });
     }

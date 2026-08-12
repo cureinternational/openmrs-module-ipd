@@ -20,7 +20,7 @@ import java.util.Map;
 @AllArgsConstructor
 public class SlotTimeCreationResult {
     private List<LocalDateTime> slotsStartTime;
-    private Map<LocalDateTime, CrossingSlotTag> crossingTagsByStartTime;
+    private Map<LocalDateTime, SlotCrossingMetadata> crossingTagsByStartTime;
 
     public static SlotTimeCreationResult withoutCrossingTags(List<LocalDateTime> slotsStartTime) {
         return new SlotTimeCreationResult(slotsStartTime, Collections.emptyMap());

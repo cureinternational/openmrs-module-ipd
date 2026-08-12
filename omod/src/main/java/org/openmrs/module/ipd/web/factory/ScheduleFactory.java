@@ -44,6 +44,7 @@ public class ScheduleFactory {
         schedule.setServiceType(medicationRequestServiceType);
         schedule.setVisit(visit);
         schedule.setActive(true);
+        schedule.setIsUpdateCompleteSchedule(request.getIsUpdateCompleteSchedule());
 
         return schedule;
     }

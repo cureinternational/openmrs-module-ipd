@@ -31,10 +31,11 @@ public class ScheduleMedicationRequest {
     private List<Long> firstDaySlotsStartTime;
     private List<Long> dayWiseSlotsStartTime;
     private List<Long> remainingDaySlotsStartTime;
-    private List<CrossingSlotContract> crossingSlots;
+    private List<CrossingSlotDTO> crossingSlots;
     private MedicationFrequency medicationFrequency;
     private ServiceType serviceType;
     private Integer variableDosageSequence;
+    private Boolean isUpdateCompleteSchedule;
 
     public enum MedicationFrequency {
         START_TIME_DURATION_FREQUENCY,
@@ -57,12 +58,12 @@ public class ScheduleMedicationRequest {
         return remainingDaySlotsStartTime != null ? remainingDaySlotsStartTime.stream().map(DateTimeUtil::convertEpocUTCToLocalTimeZone).collect(Collectors.toList()) : null;
     }
 
-    public List<LocalDateTime> getCrossingSlotsStartTimeAsLocalTime(Boolean recurring, Slot.SourceBucket sourceBucket) {
+    public List<LocalDateTime> getCrossingSlotsStartTimeAsLocalTime(Boolean recurring, Slot.SourceBucket originDoseBucket) {
         if (crossingSlots == null) return Collections.emptyList();
         return crossingSlots.stream()
                 .filter(s -> s.getEpoch() != null)
-                .filter(s -> recurring == null || recurring.equals(s.getRecurring()))
-                .filter(s -> sourceBucket == null || sourceBucket.equals(s.getSourceBucket()))
+                .filter(s -> recurring == null || recurring.equals(s.getIsRecurringAcrossDays()))
+                .filter(s -> originDoseBucket == null || originDoseBucket.equals(s.getOriginDoseBucket()))
                 .map(s -> DateTimeUtil.convertEpocUTCToLocalTimeZone(s.getEpoch()))
                 .collect(Collectors.toList());
     }

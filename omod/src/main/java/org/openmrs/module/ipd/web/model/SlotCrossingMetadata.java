@@ -13,7 +13,7 @@ import org.openmrs.module.ipd.api.model.Slot;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class CrossingSlotTag {
-    private Slot.SourceBucket sourceBucket;
-    private Boolean recurring;
+public class SlotCrossingMetadata {
+    private Slot.SourceBucket originDoseBucket;
+    private Boolean isRecurringAcrossDays;
 }

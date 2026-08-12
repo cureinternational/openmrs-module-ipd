@@ -7,7 +7,7 @@ import org.mockito.junit.MockitoJUnitRunner;
 import org.openmrs.DrugOrder;
 import org.openmrs.module.ipd.api.model.Schedule;
 import org.openmrs.module.ipd.api.model.Slot;
-import org.openmrs.module.ipd.web.contract.CrossingSlotContract;
+import org.openmrs.module.ipd.web.contract.CrossingSlotDTO;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.model.SlotTimeCreationResult;
 
@@ -53,13 +53,13 @@ public class SlotTimeCreationServiceTest {
         return order;
     }
 
-    private List<CrossingSlotContract> crossingSlots(Boolean recurring, Slot.SourceBucket sourceBucket, List<Long> epochs) {
-        List<CrossingSlotContract> crossingSlots = new ArrayList<>();
+    private List<CrossingSlotDTO> crossingSlots(Boolean recurring, Slot.SourceBucket originDoseBucket, List<Long> epochs) {
+        List<CrossingSlotDTO> crossingSlots = new ArrayList<>();
         for (Long epoch : epochs) {
-            crossingSlots.add(CrossingSlotContract.builder()
+            crossingSlots.add(CrossingSlotDTO.builder()
                     .epoch(epoch)
-                    .recurring(recurring)
-                    .sourceBucket(sourceBucket)
+                    .isRecurringAcrossDays(recurring)
+                    .originDoseBucket(originDoseBucket)
                     .build());
         }
         return crossingSlots;
@@ -207,7 +207,7 @@ public class SlotTimeCreationServiceTest {
         List<Long> dayWiseCrossings = futureEpochList(1);
         List<Long> remaining = futureEpochList(1);
 
-        List<CrossingSlotContract> crossingSlotContracts = new ArrayList<>();
+        List<CrossingSlotDTO> crossingSlotContracts = new ArrayList<>();
         crossingSlotContracts.addAll(crossingSlots(false, Slot.SourceBucket.FIRST_DAY, firstDayCrossings));
         crossingSlotContracts.addAll(crossingSlots(true, Slot.SourceBucket.DAY_WISE, dayWiseCrossings));
 

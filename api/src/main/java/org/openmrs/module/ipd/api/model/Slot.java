@@ -102,10 +102,10 @@ public class Slot extends BaseChangeableOpenmrsData {
 
 	@Column(name = "source_bucket")
 	@Enumerated(EnumType.STRING)
-	private SourceBucket sourceBucket;
+	private SourceBucket originDoseBucket;
 
 	@Column(name = "recurring_crossing")
-	private Boolean recurringCrossing;
+	private Boolean isRecurringAcrossDays;
 
 	public Boolean isStopped() {
 		return this.status !=null && this.status == SlotStatus.STOPPED;

@@ -4,6 +4,7 @@ import lombok.*;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 import org.openmrs.module.ipd.web.model.StageScheduleStatus;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -18,13 +19,15 @@ public class DrugOrderScheduleResponse {
     private List<Long> firstDaySlotsStartTime;
     private List<Long> dayWiseSlotsStartTime;
     private List<Long> remainingDaySlotsStartTime;
-    private List<CrossingSlotContract> crossingSlots;
+    private List<CrossingSlotDTO> crossingSlots;
     private Long slotStartTime;
     private Boolean medicationAdministrationStarted;
     private Boolean pendingSlotsAvailable;
     private Boolean allSlotsAttended;
     private String notes;
     private List<StageScheduleStatus> stageSchedules;
+    @JsonProperty("isUpdateCompleteSchedule")
+    private Boolean isUpdateCompleteSchedule;
 
     public static DrugOrderScheduleResponse createFrom(DrugOrderSchedule drugOrderSchedule) {
         List<Slot> slots = drugOrderSchedule.getSlots() != null ? drugOrderSchedule.getSlots() : Collections.emptyList();
@@ -43,6 +46,7 @@ public class DrugOrderScheduleResponse {
                 slot.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
             .notes(slots.isEmpty() ? null : slots.get(0).getNotes())
             .stageSchedules(drugOrderSchedule.getStageSchedules())
+            .isUpdateCompleteSchedule(drugOrderSchedule.getIsUpdateCompleteSchedule())
             .build();
     }
 }

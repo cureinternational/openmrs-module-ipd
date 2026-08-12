@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import org.openmrs.module.ipd.web.contract.CrossingSlotContract;
+import org.openmrs.module.ipd.web.contract.CrossingSlotDTO;
 
 @Getter
 @Builder
@@ -25,5 +25,5 @@ public class StageScheduleStatus {
     private List<Long> firstDaySlotsStartTime;
     private List<Long> dayWiseSlotsStartTime;
     private List<Long> remainingDaySlotsStartTime;
-    private List<CrossingSlotContract> crossingSlots;
+    private List<CrossingSlotDTO> crossingSlots;
 }

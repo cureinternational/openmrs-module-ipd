@@ -6,12 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmrs.DrugOrder;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
-import org.openmrs.module.ipd.web.model.CrossingSlotTag;
+import org.openmrs.module.ipd.web.model.SlotCrossingMetadata;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 import org.openmrs.module.ipd.web.model.StageScheduleStatus;
 import org.openmrs.module.ipd.web.model.SlotTimeCreationResult;
 import org.openmrs.module.ipd.api.model.Slot;
-import org.openmrs.module.ipd.web.contract.CrossingSlotContract;
+import org.openmrs.module.ipd.web.contract.CrossingSlotDTO;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
@@ -64,7 +64,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         }
 
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
-        Map<LocalDateTime, CrossingSlotTag> crossingTagsByStartTime = new HashMap<>();
+        Map<LocalDateTime, SlotCrossingMetadata> crossingTagsByStartTime = new HashMap<>();
 
         if (!CollectionUtils.isEmpty(request.getFirstDaySlotsStartTimeAsLocalTime())) {
             List<LocalDateTime> slotsToBeAddedForFirstDay = numberOfSlotsStartTimeToBeCreated < request.getFirstDaySlotsStartTimeAsLocalTime().size()
@@ -83,7 +83,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                     ? nonRecurringFirstDayCrossings.subList(0, numberOfSlotsStartTimeToBeCreated)
                     : nonRecurringFirstDayCrossings;
             slotsStartTime.addAll(toAdd);
-            toAdd.forEach(t -> crossingTagsByStartTime.put(t, new CrossingSlotTag(Slot.SourceBucket.FIRST_DAY, false)));
+            toAdd.forEach(t -> crossingTagsByStartTime.put(t, new SlotCrossingMetadata(Slot.SourceBucket.FIRST_DAY, false)));
             numberOfSlotsStartTimeToBeCreated -= toAdd.size();
         }
 
@@ -119,7 +119,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             slotsStartTime.addAll(slotsToBeAddedForRemainingDay);
             slotsToBeAddedForRemainingDay.stream()
                     .filter(shiftedDayWiseCrossingsSet::contains)
-                    .forEach(t -> crossingTagsByStartTime.put(t, new CrossingSlotTag(Slot.SourceBucket.DAY_WISE, true)));
+                    .forEach(t -> crossingTagsByStartTime.put(t, new SlotCrossingMetadata(Slot.SourceBucket.DAY_WISE, true)));
         }
 
         if (!CollectionUtils.isEmpty(nextSlotsStartTime) && numberOfSlotsStartTimeToBeCreated > 0) {
@@ -132,7 +132,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             // representative epoch per crossing item.
             initialSlotsToBeAddedForSecondDay.stream()
                     .filter(recurringFirstDayCrossingsSet::contains)
-                    .forEach(t -> crossingTagsByStartTime.put(t, new CrossingSlotTag(Slot.SourceBucket.FIRST_DAY, true)));
+                    .forEach(t -> crossingTagsByStartTime.put(t, new SlotCrossingMetadata(Slot.SourceBucket.FIRST_DAY, true)));
             numberOfSlotsStartTimeToBeCreated -= initialSlotsToBeAddedForSecondDay.size();
             while (numberOfSlotsStartTimeToBeCreated > 0) {
                 nextSlotsStartTime = nextSlotsStartTime.stream().map(slotStartTime -> slotStartTime.plusHours(24)).collect(Collectors.toList());
@@ -211,7 +211,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             }
             else {
                 String frequency = drugOrder.getFrequency() != null ? drugOrder.getFrequency().getName() : null;
-                List<CrossingSlotContract> crossingSlots = extractCrossingSlots(orderSlots);
+                List<CrossingSlotDTO> crossingSlots = extractCrossingSlots(orderSlots);
 
                 if (CollectionUtils.isEmpty(crossingSlots)) {
                     crossingSlots = readPersistedCrossingSlots(orderSlots, drugOrder.getUuid());
@@ -230,6 +230,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 }
 
                 drugOrderSchedule.setCrossingSlots(crossingSlots);
+
             }
 
             if (!CollectionUtils.isEmpty(drugOrderSchedule.getFirstDaySlotsStartTime())) {
@@ -257,7 +258,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         return new ArrayList<>(new LinkedHashSet<>(epochs));
     }
 
-    private List<CrossingSlotContract> readPersistedCrossingSlots(List<Slot> orderSlots, String orderUuid) {
+    private List<CrossingSlotDTO> readPersistedCrossingSlots(List<Slot> orderSlots, String orderUuid) {
         if (CollectionUtils.isEmpty(orderSlots) || orderSlots.get(0).getSchedule() == null) {
             return Collections.emptyList();
         }
@@ -273,9 +274,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             if (byOrderObj == null) {
                 return Collections.emptyList();
             }
-            Map<String, List<CrossingSlotContract>> byOrder = objectMapper.convertValue(
+            Map<String, List<CrossingSlotDTO>> byOrder = objectMapper.convertValue(
                     byOrderObj,
-                    new TypeReference<Map<String, List<CrossingSlotContract>>>() {}
+                    new TypeReference<Map<String, List<CrossingSlotDTO>>>() {}
             );
             return byOrder.getOrDefault(orderUuid, Collections.emptyList());
         } catch (Exception ignored) {
@@ -340,7 +341,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             }
 
             StageScheduleStatus scheduleStatus = builder.build();
-            List<CrossingSlotContract> stageCrossingSlots = extractCrossingSlots(stageSlots);
+            List<CrossingSlotDTO> stageCrossingSlots = extractCrossingSlots(stageSlots);
 
             stageSchedules.add(StageScheduleStatus.builder()
                     .variableDosageSequence(scheduleStatus.getVariableDosageSequence())
@@ -430,7 +431,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         }
 
         Map<LocalDate, List<LocalDateTime>> nonCrossingByDate = sortedSlots.stream()
-                .filter(slot -> slot.getSourceBucket() == null)
+                .filter(slot -> slot.getOriginDoseBucket() == null)
                 .collect(Collectors.groupingBy(
                         slot -> slot.getStartDateTime().toLocalDate(),
                         TreeMap::new,
@@ -442,13 +443,13 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         List<LocalDateTime> remainingDaySlots = new ArrayList<>();
 
         List<LocalDateTime> firstDayCrossings = sortedSlots.stream()
-                .filter(slot -> Slot.SourceBucket.FIRST_DAY.equals(slot.getSourceBucket()))
+                .filter(slot -> Slot.SourceBucket.FIRST_DAY.equals(slot.getOriginDoseBucket()))
                 .map(Slot::getStartDateTime)
                 .sorted()
                 .collect(Collectors.toList());
 
         List<LocalDateTime> dayWiseCrossings = sortedSlots.stream()
-                .filter(slot -> Slot.SourceBucket.DAY_WISE.equals(slot.getSourceBucket()))
+                .filter(slot -> Slot.SourceBucket.DAY_WISE.equals(slot.getOriginDoseBucket()))
                 .map(Slot::getStartDateTime)
                 .sorted()
                 .collect(Collectors.toList());
@@ -489,17 +490,17 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         );
     }
 
-    private List<CrossingSlotContract> extractCrossingSlots(List<Slot> slots) {
+    private List<CrossingSlotDTO> extractCrossingSlots(List<Slot> slots) {
         return slots.stream()
-                .filter(slot -> slot.getSourceBucket() != null)
-                .map(slot -> CrossingSlotContract.builder()
+                .filter(slot -> slot.getOriginDoseBucket() != null)
+                .map(slot -> CrossingSlotDTO.builder()
                         .epoch(DateTimeUtil.convertLocalDateTimeToUTCEpoc(slot.getStartDateTime()))
-                        .recurring(slot.getRecurringCrossing())
-                        .sourceBucket(slot.getSourceBucket())
+                        .isRecurringAcrossDays(slot.getIsRecurringAcrossDays())
+                        .originDoseBucket(slot.getOriginDoseBucket())
                         .build())
                 .collect(Collectors.collectingAndThen(
                         Collectors.toMap(
-                                slot -> slot.getEpoch() + "|" + slot.getSourceBucket() + "|" + slot.getRecurring(),
+                                slot -> slot.getEpoch() + "|" + slot.getOriginDoseBucket() + "|" + slot.getIsRecurringAcrossDays(),
                                 slot -> slot,
                                 (first, ignored) -> first,
                                 LinkedHashMap::new
