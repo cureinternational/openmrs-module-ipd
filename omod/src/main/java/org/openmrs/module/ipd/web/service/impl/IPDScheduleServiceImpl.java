@@ -85,7 +85,8 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
                 stageAlreadyScheduled = existingSlots != null && existingSlots.stream()
                         .anyMatch(s -> Objects.equals(s.getVariableDosageSequence(), scheduleMedicationRequest.getVariableDosageSequence()) && !s.getVoided());
             } else {
-                stageAlreadyScheduled = existingSlots != null && !existingSlots.isEmpty();
+                stageAlreadyScheduled = existingSlots != null && existingSlots.stream()
+                        .anyMatch(s -> !s.getVoided());
             }
             if (stageAlreadyScheduled) {
                 throw new APIException("Slots already created for this drug order");

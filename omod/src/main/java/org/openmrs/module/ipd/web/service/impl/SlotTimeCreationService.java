@@ -17,6 +17,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -29,6 +32,7 @@ import static org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest.Medi
 @Component
 public class SlotTimeCreationService extends BaseOpenmrsService {
 
+    private static final Log log = LogFactory.getLog(SlotTimeCreationService.class);
     private static final String CROSSING_SLOTS_BY_ORDER_KEY = "crossingSlotsByOrder";
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -385,7 +389,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 String frequencyName = dosage.path("timing").path("code").path("text").asText(null);
                 return START_TIME_FREQUENCIES.contains(frequencyName);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("Failed to parse dosingInstructions for frequency determination. Defaulting to START_TIME_FREQUENCY. Order: " +
+                    (slot.getOrder() != null ? slot.getOrder().getUuid() : "unknown"), e);
         }
         return true;
     }
@@ -449,6 +455,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
 
         if (!nonCrossingByDate.isEmpty()) {
             List<LocalDate> orderedDates = new ArrayList<>(nonCrossingByDate.keySet());
+            if (orderedDates.isEmpty()) {
+                return BucketedSlots.empty();
+            }
             LocalDate firstDate = orderedDates.get(0);
             LocalDate lastDate = orderedDates.get(orderedDates.size() - 1);
 
