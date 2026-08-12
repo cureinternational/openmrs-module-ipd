@@ -176,7 +176,11 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         return slotService.getSlotsByPatientAndVisitAndServiceType(subjectReference.get(), visit, concept);
     }
 
-    private List<String> getPrecedingVisitUuids(Patient patient, String currentVisitUuid){
+    private static final String OPD_VISIT_TYPE = "OPD";
+    private static final String IN_ABSENTIA_VISIT_TYPE = "In Absentia";
+    private static final String LAB_VISIT_TYPE = "LAB VISIT";
+    private static final String IPD_VISIT_TYPE = "IPD";
+    private List<String> getPrecedingVisitUuids(Patient patient, String currentVisitUuid) {
         List<String> result = new ArrayList<>();
         List<Visit> sortedVisits = visitService.getVisitsByPatient(patient).stream()
                 .sorted(Comparator.comparing(Visit::getStartDatetime).reversed())
@@ -188,7 +192,9 @@ public class IPDVisitServiceImpl implements IPDVisitService {
                 .orElse(-1);
 
         if (currentVisitIndex == -1) return result;
-        final Set<String> OUTPATIENT_VISIT_TYPES = new HashSet<>(Arrays.asList("OPD", "In Absentia", "LAB VISIT"));       
+        final Set<String> OUTPATIENT_VISIT_TYPES = new HashSet<>(Arrays.asList(  OPD_VISIT_TYPE,
+            IN_ABSENTIA_VISIT_TYPE,
+            LAB_VISIT_TYPE));       
         boolean foundClosedIPD = false;
         for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
             Visit v = sortedVisits.get(i);
@@ -196,10 +202,9 @@ public class IPDVisitServiceImpl implements IPDVisitService {
             String visitType = v.getVisitType().getName();
             if (OUTPATIENT_VISIT_TYPES.contains(visitType)) {
                 result.add(v.getUuid());
-            } else if (!foundClosedIPD && "IPD".equals(visitType) && v.getStopDatetime() != null) {
+            } else if (IPD_VISIT_TYPE.equals(visitType) && v.getStopDatetime() != null) {
                 result.add(v.getUuid());
                 foundClosedIPD = true;
-
             }
         }
         return result;
