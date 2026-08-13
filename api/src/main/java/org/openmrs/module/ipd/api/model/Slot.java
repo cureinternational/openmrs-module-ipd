@@ -30,8 +30,7 @@ public class Slot extends BaseChangeableOpenmrsData {
 
 	public enum SourceBucket {
 		FIRST_DAY,
-		DAY_WISE,
-		FINAL
+		DAY_WISE
 	}
 	
 	@EqualsAndHashCode.Include
@@ -111,4 +110,3 @@ public class Slot extends BaseChangeableOpenmrsData {
 		return this.status !=null && this.status == SlotStatus.STOPPED;
 	}
 }
-
