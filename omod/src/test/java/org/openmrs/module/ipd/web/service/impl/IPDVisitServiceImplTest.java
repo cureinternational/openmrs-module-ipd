@@ -5,6 +5,7 @@ import org.bahmni.module.bahmnicore.service.BahmniObsService;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -13,18 +14,23 @@ import org.openmrs.Visit;
 import org.openmrs.VisitType;
 import org.openmrs.api.ConceptService;
 import org.openmrs.api.VisitService;
+import org.openmrs.module.ipd.api.model.ServiceType;
 import org.openmrs.module.ipd.api.service.ReferenceService;
 import org.openmrs.module.ipd.api.service.SlotService;
+import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 import org.openmrs.module.ipd.web.service.IPDScheduleService;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -135,9 +141,33 @@ public class IPDVisitServiceImplTest {
         verify(drugOrderService, never()).getPrescribedDrugOrders(any(), any(), any(), any(), any(), any(), any());
     }
 
+    @Test
+    public void shouldPassCurrentAndPrecedingVisitUuids_ToGetPrescribedDrugOrders() {
+        Visit currentVisit = visit("current-uuid", "IPD", now(), null);
+        Visit inAbsentiaVisit = visit("in-absentia-uuid", "In Absentia", now() - HOUR, null);
+        Visit labVisit = visit("lab-visit-uuid", "LAB VISIT", now() - 2 * HOUR, null);
+
+        when(visitService.getVisitByUuid("current-uuid")).thenReturn(currentVisit);
+        when(visitService.getVisitsByPatient(patient)).thenReturn(Arrays.asList(labVisit, inAbsentiaVisit, currentVisit));
+        when(drugOrderService.getPrescribedDrugOrders(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(drugOrderService.getDiscontinuedDrugOrders(any())).thenReturn(Collections.emptyMap());
+        when(bahmniObsService.observationsFor(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(ipdScheduleService.getMedicationSlots(anyString(), any(ServiceType.class), anyList())).thenReturn(Collections.emptyList());
+        when(slotTimeCreationService.getDrugOrderScheduledTime(any())).thenReturn(new HashMap<String, DrugOrderSchedule>());
+
+        service.getPrescribedOrders("current-uuid", true, null, null, null, true);
+
+        ArgumentCaptor<List<String>> visitUuidsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(drugOrderService).getPrescribedDrugOrders(visitUuidsCaptor.capture(), any(), any(), any(), any(), any(), any());
+        assertEquals(Arrays.asList("current-uuid", "in-absentia-uuid", "lab-visit-uuid"), visitUuidsCaptor.getValue());
+    }
+
     private Visit visit(String uuid, String visitTypeName, long startTime, Long stopTime) {
         Visit visit = new Visit();
         visit.setUuid(uuid);
+        visit.setPatient(patient);
         visit.setVisitType(new VisitType(visitTypeName, ""));
         visit.setStartDatetime(new Date(startTime));
         if (stopTime != null) {
