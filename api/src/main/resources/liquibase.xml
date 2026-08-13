@@ -24,7 +24,6 @@
             <column name="start_date" type="DATETIME"> <constraints nullable="false"/> </column>
             <column name="end_date" type="DATETIME"> <constraints nullable="false"/> </column>
             <column name="comments" type="varchar(255)" />
-            <column name="update_complete_schedule" type="BOOLEAN"><constraints nullable="true" /></column>
             <column name="creator" type="int"> <constraints nullable="false"/> </column>
             <column name="date_created" type="DATETIME"> <constraints nullable="false"/> </column>
             <column name="changed_by" type="int"/>
@@ -221,6 +220,12 @@
     </changeSet>
 
     <changeSet id="add_update_complete_schedule_ipd_schedule_202608130418" author="copilot">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="ipd_schedule"/>
+            <not>
+                <columnExists tableName="ipd_schedule" columnName="update_complete_schedule"/>
+            </not>
+        </preConditions>
         <addColumn tableName="ipd_schedule">
             <column name="update_complete_schedule" type="BOOLEAN">
                 <constraints nullable="true"/>

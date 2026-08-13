@@ -63,90 +63,109 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             numberOfSlotsStartTimeToBeCreated = (int) (Math.ceil(order.getQuantity() / order.getDose()));
         }
 
-        List<LocalDateTime> slotsStartTime = new ArrayList<>();
+        LinkedHashSet<LocalDateTime> slotsStartTime = new LinkedHashSet<>();
         Map<LocalDateTime, SlotCrossingMetadata> crossingTagsByStartTime = new HashMap<>();
 
-        if (!CollectionUtils.isEmpty(request.getFirstDaySlotsStartTimeAsLocalTime())) {
-            List<LocalDateTime> slotsToBeAddedForFirstDay = numberOfSlotsStartTimeToBeCreated < request.getFirstDaySlotsStartTimeAsLocalTime().size()
-                ? request.getFirstDaySlotsStartTimeAsLocalTime().subList(0, numberOfSlotsStartTimeToBeCreated)
-                : request.getFirstDaySlotsStartTimeAsLocalTime();
+        numberOfSlotsStartTimeToBeCreated -= addDistinctSlots(
+                slotsStartTime,
+                request.getFirstDaySlotsStartTimeAsLocalTime(),
+                numberOfSlotsStartTimeToBeCreated,
+                null,
+                crossingTagsByStartTime);
 
-            slotsStartTime.addAll(slotsToBeAddedForFirstDay);
-            numberOfSlotsStartTimeToBeCreated -= slotsToBeAddedForFirstDay.size();
-        }
-
-        // Non-recurring first-day midnight-crossing slot: added once, never replicated across days.
+        // Crossings are always persisted from the explicit payload list.
         List<LocalDateTime> nonRecurringFirstDayCrossings =
                 request.getCrossingSlotsStartTimeAsLocalTime(false, Slot.SourceBucket.FIRST_DAY);
-        if (!CollectionUtils.isEmpty(nonRecurringFirstDayCrossings) && numberOfSlotsStartTimeToBeCreated > 0) {
-            List<LocalDateTime> toAdd = numberOfSlotsStartTimeToBeCreated < nonRecurringFirstDayCrossings.size()
-                    ? nonRecurringFirstDayCrossings.subList(0, numberOfSlotsStartTimeToBeCreated)
-                    : nonRecurringFirstDayCrossings;
-            slotsStartTime.addAll(toAdd);
-            toAdd.forEach(t -> crossingTagsByStartTime.put(t, new SlotCrossingMetadata(Slot.SourceBucket.FIRST_DAY, false)));
-            numberOfSlotsStartTimeToBeCreated -= toAdd.size();
-        }
+        numberOfSlotsStartTimeToBeCreated -= addDistinctSlots(
+                slotsStartTime,
+                nonRecurringFirstDayCrossings,
+                numberOfSlotsStartTimeToBeCreated,
+                new SlotCrossingMetadata(Slot.SourceBucket.FIRST_DAY, false),
+                crossingTagsByStartTime);
 
-        // Recurring first-day midnight-crossing slot: joins the day-wise recurring pattern.
-        List<LocalDateTime> dayWiseSlotsStartTimeFromRequest = request.getDayWiseSlotsStartTimeAsLocalTime();
-        List<LocalDateTime> nextSlotsStartTime = new ArrayList<>(
-                dayWiseSlotsStartTimeFromRequest != null ? dayWiseSlotsStartTimeFromRequest : Collections.emptyList()
-        );
         List<LocalDateTime> recurringFirstDayCrossings =
                 request.getCrossingSlotsStartTimeAsLocalTime(true, Slot.SourceBucket.FIRST_DAY);
-        nextSlotsStartTime.addAll(recurringFirstDayCrossings);
-        Set<LocalDateTime> recurringFirstDayCrossingsSet = new HashSet<>(recurringFirstDayCrossings);
+        numberOfSlotsStartTimeToBeCreated -= addDistinctSlots(
+                slotsStartTime,
+                recurringFirstDayCrossings,
+                numberOfSlotsStartTimeToBeCreated,
+                new SlotCrossingMetadata(Slot.SourceBucket.FIRST_DAY, true),
+                crossingTagsByStartTime);
 
-        List<LocalDateTime> remainingDaySlotsStartTime = new ArrayList<>(
-                request.getRemainingDaySlotsStartTimeAsLocalTime() != null ? request.getRemainingDaySlotsStartTimeAsLocalTime() : Collections.emptyList()
-        );
-
-        // Recurring day-wise midnight-crossing slot: persist in the exact epoch supplied by UI.
         List<LocalDateTime> recurringDayWiseCrossings =
                 request.getCrossingSlotsStartTimeAsLocalTime(true, Slot.SourceBucket.DAY_WISE);
-        List<LocalDateTime> shiftedDayWiseCrossings = Collections.emptyList();
-        if (!CollectionUtils.isEmpty(recurringDayWiseCrossings)) {
-            shiftedDayWiseCrossings = recurringDayWiseCrossings;
-            remainingDaySlotsStartTime.addAll(shiftedDayWiseCrossings);
-        }
-        Set<LocalDateTime> shiftedDayWiseCrossingsSet = new HashSet<>(shiftedDayWiseCrossings);
+        numberOfSlotsStartTimeToBeCreated -= addDistinctSlots(
+                slotsStartTime,
+                recurringDayWiseCrossings,
+                numberOfSlotsStartTimeToBeCreated,
+                new SlotCrossingMetadata(Slot.SourceBucket.DAY_WISE, true),
+                crossingTagsByStartTime);
 
-        if (!CollectionUtils.isEmpty(remainingDaySlotsStartTime) && numberOfSlotsStartTimeToBeCreated > 0) {
-            List<LocalDateTime> slotsToBeAddedForRemainingDay = numberOfSlotsStartTimeToBeCreated < remainingDaySlotsStartTime.size()
-                    ? remainingDaySlotsStartTime.subList(0, numberOfSlotsStartTimeToBeCreated)
-                    : remainingDaySlotsStartTime;
-            numberOfSlotsStartTimeToBeCreated -= slotsToBeAddedForRemainingDay.size();
-            slotsStartTime.addAll(slotsToBeAddedForRemainingDay);
-            slotsToBeAddedForRemainingDay.stream()
-                    .filter(shiftedDayWiseCrossingsSet::contains)
-                    .forEach(t -> crossingTagsByStartTime.put(t, new SlotCrossingMetadata(Slot.SourceBucket.DAY_WISE, true)));
-        }
+        numberOfSlotsStartTimeToBeCreated -= addDistinctSlots(
+                slotsStartTime,
+                request.getRemainingDaySlotsStartTimeAsLocalTime(),
+                numberOfSlotsStartTimeToBeCreated,
+                null,
+                crossingTagsByStartTime);
 
-        if (!CollectionUtils.isEmpty(nextSlotsStartTime) && numberOfSlotsStartTimeToBeCreated > 0) {
-            List<LocalDateTime> initialSlotsToBeAddedForSecondDay = numberOfSlotsStartTimeToBeCreated < nextSlotsStartTime.size()
-                    ? nextSlotsStartTime.subList(0, numberOfSlotsStartTimeToBeCreated)
-                    : nextSlotsStartTime;
-            slotsStartTime.addAll(initialSlotsToBeAddedForSecondDay);
-            // Only tag the first occurrence of a recurring first-day crossing slot; later
-            // replicated days don't need their own tag since the response only needs one
-            // representative epoch per crossing item.
-            initialSlotsToBeAddedForSecondDay.stream()
-                    .filter(recurringFirstDayCrossingsSet::contains)
-                    .forEach(t -> crossingTagsByStartTime.put(t, new SlotCrossingMetadata(Slot.SourceBucket.FIRST_DAY, true)));
-            numberOfSlotsStartTimeToBeCreated -= initialSlotsToBeAddedForSecondDay.size();
-            while (numberOfSlotsStartTimeToBeCreated > 0) {
-                nextSlotsStartTime = nextSlotsStartTime.stream().map(slotStartTime -> slotStartTime.plusHours(24)).collect(Collectors.toList());
-                if (numberOfSlotsStartTimeToBeCreated >= nextSlotsStartTime.size()) {
-                    slotsStartTime.addAll(nextSlotsStartTime);
-                    numberOfSlotsStartTimeToBeCreated -= nextSlotsStartTime.size();
-                } else {
-                    slotsStartTime.addAll(nextSlotsStartTime.subList(0, numberOfSlotsStartTimeToBeCreated));
-                    numberOfSlotsStartTimeToBeCreated -= nextSlotsStartTime.subList(0, numberOfSlotsStartTimeToBeCreated).size();
-                }
+        // Day-wise expansion should only use regular day-wise slots.
+        List<LocalDateTime> dayWiseSlotsStartTimeFromRequest =
+                request.getDayWiseSlotsStartTimeAsLocalTime() == null
+                        ? Collections.emptyList()
+                        : request.getDayWiseSlotsStartTimeAsLocalTime();
+
+        List<LocalDateTime> cycleSlots = new ArrayList<>(dayWiseSlotsStartTimeFromRequest);
+        while (numberOfSlotsStartTimeToBeCreated > 0 && !cycleSlots.isEmpty()) {
+            int added = addDistinctSlots(
+                    slotsStartTime,
+                    cycleSlots,
+                    numberOfSlotsStartTimeToBeCreated,
+                    null,
+                    crossingTagsByStartTime);
+
+            if (added == 0) {
+                cycleSlots = cycleSlots.stream()
+                        .map(slotStartTime -> slotStartTime.plusHours(24))
+                        .collect(Collectors.toList());
+                continue;
+            }
+
+            numberOfSlotsStartTimeToBeCreated -= added;
+            if (numberOfSlotsStartTimeToBeCreated > 0) {
+                cycleSlots = cycleSlots.stream()
+                        .map(slotStartTime -> slotStartTime.plusHours(24))
+                        .collect(Collectors.toList());
             }
         }
 
-        return new SlotTimeCreationResult(slotsStartTime, crossingTagsByStartTime);
+        return new SlotTimeCreationResult(new ArrayList<>(slotsStartTime), crossingTagsByStartTime);
+    }
+
+    private int addDistinctSlots(Set<LocalDateTime> accumulator,
+                                 List<LocalDateTime> candidates,
+                                 int remainingCount,
+                                 SlotCrossingMetadata crossingMetadata,
+                                 Map<LocalDateTime, SlotCrossingMetadata> crossingTagsByStartTime) {
+        if (remainingCount <= 0 || CollectionUtils.isEmpty(candidates)) {
+            return 0;
+        }
+
+        int added = 0;
+        for (LocalDateTime candidate : candidates) {
+            if (added >= remainingCount) {
+                break;
+            }
+            if (candidate == null) {
+                continue;
+            }
+            if (accumulator.add(candidate)) {
+                added++;
+            }
+            if (crossingMetadata != null) {
+                crossingTagsByStartTime.put(candidate, crossingMetadata);
+            }
+        }
+        return added;
     }
 
     private int inferRequestedSlotsCount(ScheduleMedicationRequest request) {
@@ -230,6 +249,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 }
 
                 drugOrderSchedule.setCrossingSlots(crossingSlots);
+                drugOrderSchedule.setIsUpdateCompleteSchedule(isUpdateCompleteScheduleEnabled(crossingSlots));
 
             }
 
@@ -475,12 +495,20 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             }
         }
 
-        dayWiseSlots.addAll(firstDayCrossings);
-        remainingDaySlots.addAll(dayWiseCrossings);
-
         Collections.sort(firstDaySlots);
         Collections.sort(dayWiseSlots);
         Collections.sort(remainingDaySlots);
+
+        // Keep only the terminal day-wise crossing in remainder so the last-day
+        // midnight spillover is visible in remainder slots without polluting
+        // non-terminal remainder days.
+        if (!CollectionUtils.isEmpty(dayWiseCrossings)) {
+            LocalDateTime terminalDayWiseCrossing = dayWiseCrossings.get(dayWiseCrossings.size() - 1);
+            if (!remainingDaySlots.contains(terminalDayWiseCrossing)) {
+                remainingDaySlots.add(terminalDayWiseCrossing);
+                Collections.sort(remainingDaySlots);
+            }
+        }
 
         return new BucketedSlots(
                 sortedSlots.get(0).getStartDateTime(),
@@ -507,6 +535,16 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                         ),
                         map -> new ArrayList<>(map.values())
                 ));
+    }
+
+    private boolean isUpdateCompleteScheduleEnabled(List<CrossingSlotDTO> crossingSlots) {
+        if (CollectionUtils.isEmpty(crossingSlots)) {
+            return false;
+        }
+
+        return crossingSlots.stream().anyMatch(slot ->
+                Slot.SourceBucket.FIRST_DAY.equals(slot.getOriginDoseBucket()) &&
+                        Boolean.TRUE.equals(slot.getIsRecurringAcrossDays()));
     }
 
     private static class BucketedSlots {

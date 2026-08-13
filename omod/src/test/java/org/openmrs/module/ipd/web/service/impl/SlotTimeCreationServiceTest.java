@@ -175,7 +175,7 @@ public class SlotTimeCreationServiceTest {
         SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
 
         assertNotNull("Result should not be null", result);
-        assertEquals(3, result.getSlotsStartTime().size());
+        assertEquals(2, result.getSlotsStartTime().size());
         assertEquals(1, result.getCrossingTagsByStartTime().size());
     }
 
