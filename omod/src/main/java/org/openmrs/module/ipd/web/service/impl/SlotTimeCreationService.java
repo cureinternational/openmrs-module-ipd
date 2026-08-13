@@ -33,7 +33,6 @@ import static org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest.Medi
 public class SlotTimeCreationService extends BaseOpenmrsService {
 
     private static final Log log = LogFactory.getLog(SlotTimeCreationService.class);
-    private static final String CROSSING_SLOTS_BY_ORDER_KEY = "crossingSlotsByOrder";
     private static final List<String> INTRADAY_DOSE_FIELDS = Arrays.asList(
             "morningDose",
             "afternoonDose",
@@ -350,9 +349,8 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 String frequency = drugOrder.getFrequency() != null ? drugOrder.getFrequency().getName() : null;
                 List<CrossingSlotDTO> crossingSlots = extractCrossingSlots(orderSlots);
 
-                if (CollectionUtils.isEmpty(crossingSlots)) {
-                    crossingSlots = readPersistedCrossingSlots(orderSlots, drugOrder.getUuid());
-                }
+                // Crossing slots are now tagged at save time via tagCrossingSlots().
+                // Pre-existing orders without tags will have empty crossingSlots until re-saved.
 
                 if (frequency != null && START_TIME_FREQUENCIES.contains(frequency)) {
                     List<Slot> sortedSlots = orderSlots.stream()
@@ -395,31 +393,6 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         return new ArrayList<>(new LinkedHashSet<>(epochs));
     }
 
-    private List<CrossingSlotDTO> readPersistedCrossingSlots(List<Slot> orderSlots, String orderUuid) {
-        if (CollectionUtils.isEmpty(orderSlots) || orderSlots.get(0).getSchedule() == null) {
-            return Collections.emptyList();
-        }
-
-        String comments = orderSlots.get(0).getSchedule().getComments();
-        if (comments == null || comments.trim().isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        try {
-            Map<String, Object> root = objectMapper.readValue(comments, new TypeReference<Map<String, Object>>() {});
-            Object byOrderObj = root.get(CROSSING_SLOTS_BY_ORDER_KEY);
-            if (byOrderObj == null) {
-                return Collections.emptyList();
-            }
-            Map<String, List<CrossingSlotDTO>> byOrder = objectMapper.convertValue(
-                    byOrderObj,
-                    new TypeReference<Map<String, List<CrossingSlotDTO>>>() {}
-            );
-            return byOrder.getOrDefault(orderUuid, Collections.emptyList());
-        } catch (Exception ignored) {
-            return Collections.emptyList();
-        }
-    }
 
     public List<StageScheduleStatus> buildStageSchedules(List<Slot> orderSlots) {
         Map<Integer, List<Slot>> slotsBySequence = orderSlots.stream()
@@ -437,6 +410,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                     .sorted(Comparator.comparing(Slot::getStartDateTime))
                     .collect(Collectors.toList());
 
+            List<CrossingSlotDTO> stageCrossingSlots = extractCrossingSlots(stageSlots);
             StageScheduleStatus.StageScheduleStatusBuilder builder = StageScheduleStatus.builder()
                     .variableDosageSequence(sequence)
                     .isScheduled(!stageSlots.isEmpty())
@@ -446,7 +420,8 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                             s.getStartDateTime() != null &&
                                     LocalDateTime.now().isBefore(s.getStartDateTime()) &&
                                     s.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
-                    .notes(stageSlots.get(0).getNotes());
+                    .notes(stageSlots.get(0).getNotes())
+                    .crossingSlots(stageCrossingSlots);
 
             if (isStartTimeFrequencyForStage(stageSlots.get(0), sequence)) {
                 stageSlots.stream()
@@ -478,8 +453,6 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             }
 
             StageScheduleStatus scheduleStatus = builder.build();
-            List<CrossingSlotDTO> stageCrossingSlots = extractCrossingSlots(stageSlots);
-
             stageSchedules.add(StageScheduleStatus.builder()
                     .variableDosageSequence(scheduleStatus.getVariableDosageSequence())
                     .isScheduled(scheduleStatus.getIsScheduled())
@@ -491,7 +464,7 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                     .firstDaySlotsStartTime(deduplicateEpochsNullable(scheduleStatus.getFirstDaySlotsStartTime()))
                     .dayWiseSlotsStartTime(deduplicateEpochsNullable(scheduleStatus.getDayWiseSlotsStartTime()))
                     .remainingDaySlotsStartTime(deduplicateEpochsNullable(scheduleStatus.getRemainingDaySlotsStartTime()))
-                    .crossingSlots(stageCrossingSlots)
+                    .crossingSlots(scheduleStatus.getCrossingSlots())
                     .build());
         }
         return stageSchedules;
