@@ -73,7 +73,9 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         visitUuidsList.add(visitUuid);
         Visit visit = visitService.getVisitByUuid(visitUuid);
         if (visit == null) return Collections.emptyList();
-
+        // Fetch drug orders from preceding OPD and preceding closed IPD visits.
+        // OPD: covers same-day OPD-to-IPD emergency conversions.
+        // Closed IPD: covers active drugs from the patient's most recent prior admission.
         visitUuidsList.addAll(getPrecedingVisitUuids(visit.getPatient(), visitUuid));
 
         List<DrugOrder> prescribedDrugOrders = drugOrderService.getPrescribedDrugOrders(
