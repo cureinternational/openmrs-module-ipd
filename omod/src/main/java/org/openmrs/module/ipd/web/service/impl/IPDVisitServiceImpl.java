@@ -19,6 +19,7 @@ import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.api.model.*;
 import org.openmrs.module.ipd.api.service.ReferenceService;
 import org.openmrs.module.ipd.api.service.SlotService;
+import org.openmrs.module.ipd.api.util.IPDConstants;
 import org.openmrs.module.ipd.web.service.IPDVisitService;
 import org.openmrs.module.ipd.web.service.IPDScheduleService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,15 +72,25 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         List<String> visitUuidsList = new ArrayList<>();
         visitUuidsList.add(visitUuid);
         Visit visit = visitService.getVisitByUuid(visitUuid);
+        if (visit == null) return Collections.emptyList();
         // Fetch drug orders from preceding OPD and preceding closed IPD visits.
         // OPD: covers same-day OPD-to-IPD emergency conversions.
         // Closed IPD: covers active drugs from the patient's most recent prior admission.
         visitUuidsList.addAll(getPrecedingVisitUuids(visit.getPatient(), visitUuid));
-        List<DrugOrder> prescribedDrugOrders = drugOrderService.getPrescribedDrugOrders(visitUuidsList, visit.getPatient().getUuid(), includeActiveVisit, numberOfVisits, startDate, endDate, getEffectiveOrdersOnly);
-        return getIPDDrugOrders(visit.getPatient().getUuid(), prescribedDrugOrders,visit);
+
+        List<DrugOrder> prescribedDrugOrders = drugOrderService.getPrescribedDrugOrders(
+                visitUuidsList,
+                visit.getPatient().getUuid(),
+                includeActiveVisit,
+                numberOfVisits,
+                startDate,
+                endDate,
+                getEffectiveOrdersOnly
+        );
+        return getIPDDrugOrders(visit.getPatient().getUuid(), prescribedDrugOrders, visit);
     }
 
-    private List<IPDDrugOrder> getIPDDrugOrders(String patientUuid, List<DrugOrder> drugOrders,Visit currentVisit) {
+    private List<IPDDrugOrder> getIPDDrugOrders(String patientUuid, List<DrugOrder> drugOrders, Visit currentVisit) {
         Map<String, DrugOrder> drugOrderMap = drugOrderService.getDiscontinuedDrugOrders(drugOrders);
         // filter drug orders where its stop date is after current visit start Date
         List<DrugOrder> drugOrdersFiltered = drugOrders.stream()
@@ -182,16 +193,19 @@ public class IPDVisitServiceImpl implements IPDVisitService {
                 .orElse(-1);
 
         if (currentVisitIndex == -1) return result;
+        final Set<String> OUTPATIENT_VISIT_TYPES = new HashSet<>(Arrays.asList(
+            IPDConstants.OPD_VISIT_TYPE,
+            IPDConstants.IN_ABSENTIA_VISIT_TYPE,
+            IPDConstants.LAB_VISIT_TYPE));
 
-        boolean foundOPD = false, foundClosedIPD = false;
+        boolean foundClosedIPD = false;
         for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
-            if (foundOPD && foundClosedIPD) break;
             Visit v = sortedVisits.get(i);
+            if (foundClosedIPD) break;
             String visitType = v.getVisitType().getName();
-            if (!foundOPD && "OPD".equals(visitType)) {
+            if (OUTPATIENT_VISIT_TYPES.contains(visitType)) {
                 result.add(v.getUuid());
-                foundOPD = true;
-            } else if (!foundClosedIPD && "IPD".equals(visitType) && v.getStopDatetime() != null) {
+            } else if (IPDConstants.IPD_VISIT_TYPE.equals(visitType) && v.getStopDatetime() != null) {
                 result.add(v.getUuid());
                 foundClosedIPD = true;
             }
