@@ -110,6 +110,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         if (slots.isEmpty()) {
             Optional<Reference> subjectReference = referenceService.getReferenceByTypeAndTargetUUID(Patient.class.getTypeName(), patientUuid);
             if (subjectReference.isPresent()) {
+                // Legacy fallback for older saved schedules that do not surface through the service-specific queries.
                 slots = slotService.getSlotsBySubjectReferenceIdAndOrderUuids(subjectReference.get(), orderUuids);
             }
         }

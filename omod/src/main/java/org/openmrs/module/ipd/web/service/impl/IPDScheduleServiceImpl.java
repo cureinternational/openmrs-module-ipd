@@ -67,6 +67,23 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
         this.orderService = orderService;
     }
 
+    /**
+     * Creates and persists medication schedule with all slots and user preferences.
+     *
+     * Key steps:
+     * 1. Get or create visit-level Schedule entity
+     * 2. Persist user's "apply to all days" toggle choice (isUpdateCompleteSchedule)
+     * 3. Create slots from frontend schedule request
+     * 4. Tag crossing slots with metadata (originDoseBucket, isRecurringAcrossDays)
+     * 5. Persist all slots to database
+     *
+     * The toggle choice is essential for UI state restoration - when user toggles "apply to all days"
+     * OFF then edits again, the backend must return the same toggle state so frontend restores
+     * the correct UI. This toggle is persisted at the Schedule level, not individual slots.
+     *
+     * @param scheduleMedicationRequest Request from frontend with slot times, toggle, and frequency
+     * @return Persisted Schedule with all slots and metadata
+     */
     @Override
     public Schedule saveMedicationSchedule(ScheduleMedicationRequest scheduleMedicationRequest) {
         Patient patient = patientService.getPatientByUuid(scheduleMedicationRequest.getPatientUuid());
@@ -76,6 +93,9 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
             Schedule schedule = scheduleFactory.createScheduleForMedicationFrom(scheduleMedicationRequest, visit);
             savedSchedule = scheduleService.saveSchedule(schedule);
         }
+        // Persist the user's toggle choice for "apply to all days" - critical for UI state restoration
+        savedSchedule.setIsUpdateCompleteSchedule(scheduleMedicationRequest.getIsUpdateCompleteSchedule());
+        savedSchedule = scheduleService.saveSchedule(savedSchedule);
         DrugOrder order = (DrugOrder) orderService.getOrderByUuid(scheduleMedicationRequest.getOrderUuid());
         ServiceType serviceType = scheduleMedicationRequest.getServiceType() !=null ? scheduleMedicationRequest.getServiceType() : ServiceType.MEDICATION_REQUEST;
         if(serviceType.equals(ServiceType.MEDICATION_REQUEST)){

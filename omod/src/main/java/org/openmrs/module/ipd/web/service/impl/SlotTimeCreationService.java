@@ -34,10 +34,28 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
 
     private static final Log log = LogFactory.getLog(SlotTimeCreationService.class);
     private static final String CROSSING_SLOTS_BY_ORDER_KEY = "crossingSlotsByOrder";
+    private static final List<String> INTRADAY_DOSE_FIELDS = Arrays.asList(
+            "morningDose",
+            "afternoonDose",
+            "eveningDose",
+            "nightDose"
+    );
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public static final List<String> START_TIME_FREQUENCIES= Arrays.asList(new String[]{"Every Hour", "Every 2 hours", "Every 3 hours", "Every 4 hours", "Every 6 hours", "Every 8 hours", "Every 12 hours", "Once a day", "Nocte (At Night)", "Every 30 minutes", "STAT (Immediately)", "In Afternoon", "In Morning", "Once a week", "Twice a week", "Three times a week", "Four days a week", "Five days a week", "Six days a week", "On alternate days", "Monthly", "Once a month", "Every 2 weeks", "Every 3 weeks"});
 
+    /**
+     * Main entry point for creating medication slots from frontend request.
+     * Routes to appropriate slot creation logic based on medication frequency type.
+     *
+     * @param request Medication scheduling request containing slot times and frequency info
+     * @param order The underlying drug order
+     * @return SlotTimeCreationResult containing all slots and crossing slot metadata
+     *
+     * Routes:
+     * - START_TIME_DURATION: Simple start time + duration calculation
+     * - FIXED_SCHEDULE: Complex multi-day pattern with day-wise expansion and crossing slots
+     */
     public SlotTimeCreationResult createSlotsStartTimeFrom(ScheduleMedicationRequest request, DrugOrder order) {
         if (request.getSlotStartTimeAsLocaltime() != null && request.getMedicationFrequency() == START_TIME_DURATION_FREQUENCY) {
             return SlotTimeCreationResult.withoutCrossingTags(getSlotsStartTimeWithStartTimeDurationFrequency(request, order));
@@ -52,15 +70,27 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         return SlotTimeCreationResult.withoutCrossingTags(Collections.emptyList());
     }
 
+    /**
+     * Core slot creation logic for FIXED_SCHEDULE medications.
+     *
+     * Builds complete medication schedule across prescription duration by:
+     * 1. Adding first-day slots (partial day with custom times)
+     * 2. Adding first-day crossing slots (doses that cross midnight)
+     * 3. Adding remaining-day slots (final partial day if needed)
+     * 4. Expanding day-wise pattern across available days (24-hour cycling)
+     * 5. Tagging crossing slots with metadata (origin bucket, recurrence flag)
+     *
+     * Day-wise expansion: If prescription is 3 days, day-wise slots repeat on day 2 (and cross to day 3).
+     * Each repeat is shifted by 24 hours until all slots are scheduled.
+     *
+     * @param request Contains first day, day-wise, remaining day, and crossing slot times
+     * @param order The drug order with duration information
+     * @return SlotTimeCreationResult with all slots and crossing slot metadata mapping
+     */
     private SlotTimeCreationResult getSlotsStartTimeWithFixedScheduleFrequency(ScheduleMedicationRequest request, DrugOrder order) {
-        int numberOfSlotsStartTimeToBeCreated;
-        if (order.getQuantity() == null || order.getDose() == null) {
-            numberOfSlotsStartTimeToBeCreated = inferRequestedSlotsCount(request);
-            if (numberOfSlotsStartTimeToBeCreated <= 0) {
-                return SlotTimeCreationResult.withoutCrossingTags(Collections.emptyList());
-            }
-        } else {
-            numberOfSlotsStartTimeToBeCreated = (int) (Math.ceil(order.getQuantity() / order.getDose()));
+        int numberOfSlotsStartTimeToBeCreated = resolveSlotCountForFixedSchedule(request, order);
+        if (numberOfSlotsStartTimeToBeCreated <= 0) {
+            return SlotTimeCreationResult.withoutCrossingTags(Collections.emptyList());
         }
 
         LinkedHashSet<LocalDateTime> slotsStartTime = new LinkedHashSet<>();
@@ -141,6 +171,19 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         return new SlotTimeCreationResult(new ArrayList<>(slotsStartTime), crossingTagsByStartTime);
     }
 
+    /**
+     * Adds slots to accumulator, deduplicating and tagging crossing slots.
+     *
+     * Uses Set.add() to automatically skip duplicates. If a slot is successfully added AND
+     * it has crossing metadata, stores the metadata for later persistence to database.
+     *
+     * @param accumulator Set of all slots (automatically deduplicates)
+     * @param candidates Slot times to add (may include duplicates)
+     * @param remainingCount How many more slots we need (stops early if reached)
+     * @param crossingMetadata Metadata if these are crossing slots (null for regular slots)
+     * @param crossingTagsByStartTime Map to store metadata for crossing slots
+     * @return Number of new slots actually added (duplicates don't count)
+     */
     private int addDistinctSlots(Set<LocalDateTime> accumulator,
                                  List<LocalDateTime> candidates,
                                  int remainingCount,
@@ -196,8 +239,71 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 + recurringDayWiseCrossingCount;
     }
 
+    private int resolveSlotCountForFixedSchedule(ScheduleMedicationRequest request, DrugOrder order) {
+        Integer intradaySlotCount = resolveIntradaySlotCount(order);
+        if (intradaySlotCount != null && intradaySlotCount > 0) {
+            return intradaySlotCount;
+        }
+
+        if (order.getQuantity() == null || order.getDose() == null) {
+            return inferRequestedSlotsCount(request);
+        }
+        return (int) Math.ceil(order.getQuantity() / order.getDose());
+    }
+
+    private Integer resolveIntradaySlotCount(DrugOrder order) {
+        if (order == null || order.getDuration() == null || order.getDuration() <= 0) {
+            return null;
+        }
+
+        if (!hasIntradayDoseFields(order.getDosingInstructions())) {
+            return null;
+        }
+
+        return getIntradayFrequencyPerDay(order) * order.getDuration();
+    }
+
+    private boolean hasIntradayDoseFields(String dosingInstructions) {
+        if (dosingInstructions == null || dosingInstructions.trim().isEmpty()) {
+            return false;
+        }
+
+        try {
+            JsonNode dosing = objectMapper.readTree(dosingInstructions);
+            return dosing.isObject() && INTRADAY_DOSE_FIELDS.stream().anyMatch(dosing::has);
+        } catch (Exception e) {
+            log.warn("Failed to parse intraday dosingInstructions. Falling back to non-intraday flow.", e);
+            return false;
+        }
+    }
+
+    private int getIntradayFrequencyPerDay(DrugOrder order) {
+        try {
+            String dosingInstructions = order.getDosingInstructions();
+            if (dosingInstructions == null || dosingInstructions.trim().isEmpty()) {
+                log.warn("Intraday order " + order.getUuid() + " has empty dosingInstructions; falling back to 1 slot/day");
+                return 1;
+            }
+
+            JsonNode dosing = objectMapper.readTree(dosingInstructions);
+            if (!dosing.isObject()) {
+                log.warn("Intraday order " + order.getUuid() + " has non-object dosingInstructions; falling back to 1 slot/day");
+                return 1;
+            }
+
+            int count = (int) INTRADAY_DOSE_FIELDS.stream()
+                    .filter(field -> dosing.path(field).asDouble(0) != 0)
+                    .count();
+            return count > 0 ? count : 1;
+        } catch (Exception e) {
+            log.warn("Failed to derive intraday frequency per day for order " + order.getUuid()
+                    + " with dosingInstructions [" + order.getDosingInstructions() + "]", e);
+            return 1;
+        }
+    }
+
     private List<LocalDateTime> getSlotsStartTimeWithStartTimeDurationFrequency(ScheduleMedicationRequest request, DrugOrder order) {
-        int numberOfSlotsStartTimeToBeCreated = (order.getQuantity() == 0.0 || order.getFrequency() == null || order.getDuration() == null) ? 1 : (int) (Math.ceil(order.getQuantity() / order.getDose()));
+        int numberOfSlotsStartTimeToBeCreated = resolveSlotCountForStartTimeDuration(order);
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
         Double slotDurationInHours =  order.getFrequency() != null ? 24 / order.getFrequency().getFrequencyPerDay() : 0;
         LocalDateTime slotStartTime = request.getSlotStartTimeAsLocaltime();
@@ -213,6 +319,18 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             }
         }
         return slotsStartTime;
+    }
+
+    private int resolveSlotCountForStartTimeDuration(DrugOrder order) {
+        Integer intradaySlotCount = resolveIntradaySlotCount(order);
+        if (intradaySlotCount != null && intradaySlotCount > 0) {
+            return intradaySlotCount;
+        }
+
+        if (order.getQuantity() == 0.0 || order.getFrequency() == null || order.getDuration() == null || order.getDose() == null) {
+            return 1;
+        }
+        return (int) Math.ceil(order.getQuantity() / order.getDose());
     }
 
     public HashMap<String , DrugOrderSchedule> getDrugOrderScheduledTime(Map<DrugOrder,List<Slot>> slotsByOrder){
@@ -249,7 +367,6 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                 }
 
                 drugOrderSchedule.setCrossingSlots(crossingSlots);
-                drugOrderSchedule.setIsUpdateCompleteSchedule(isUpdateCompleteScheduleEnabled(crossingSlots));
 
             }
 
@@ -440,6 +557,21 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         }
     }
 
+    /**
+     * Separates persisted slots into dose-schedule buckets: first day, day-wise, remaining day.
+     *
+     * Slots are categorized by date position and origin bucket:
+     * - First day: Slots on the prescription's first date
+     * - Day-wise: Slots on middle dates (days that repeat the pattern)
+     * - Remaining: Slots on the last date (partial day at end)
+     * - Crossings: Slots with originDoseBucket set (midnight crossers) - not bucketed here
+     *
+     * Special handling: Terminal day-wise crossing (last midnight crossing) is added to
+     * remaining slots so it's visible in the response.
+     *
+     * @param slots Persisted Slot records from database
+     * @return BucketedSlots with slots organized by date position
+     */
     private BucketedSlots bucketSlots(List<Slot> slots) {
         List<Slot> sortedSlots = slots.stream()
                 .filter(slot -> slot.getStartDateTime() != null)
@@ -518,6 +650,16 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         );
     }
 
+    /**
+     * Converts persisted Slot records to CrossingSlotDTO for API response.
+     *
+     * Only extracts slots with originDoseBucket set (i.e., crossing slots).
+     * Deduplicates by (epoch + originDoseBucket + isRecurringAcrossDays) composite key,
+     * keeping first occurrence. Maintains insertion order for consistent response.
+     *
+     * @param slots Persisted Slot records (may include both regular and crossing slots)
+     * @return List of CrossingSlotDTO with metadata for API response
+     */
     private List<CrossingSlotDTO> extractCrossingSlots(List<Slot> slots) {
         return slots.stream()
                 .filter(slot -> slot.getOriginDoseBucket() != null)
@@ -535,16 +677,6 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
                         ),
                         map -> new ArrayList<>(map.values())
                 ));
-    }
-
-    private boolean isUpdateCompleteScheduleEnabled(List<CrossingSlotDTO> crossingSlots) {
-        if (CollectionUtils.isEmpty(crossingSlots)) {
-            return false;
-        }
-
-        return crossingSlots.stream().anyMatch(slot ->
-                Slot.SourceBucket.FIRST_DAY.equals(slot.getOriginDoseBucket()) &&
-                        Boolean.TRUE.equals(slot.getIsRecurringAcrossDays()));
     }
 
     private static class BucketedSlots {
