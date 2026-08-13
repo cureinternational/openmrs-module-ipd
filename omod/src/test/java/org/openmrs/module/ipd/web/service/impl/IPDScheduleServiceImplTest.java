@@ -78,6 +78,7 @@ public class IPDScheduleServiceImplTest {
         when(patientService.getPatientByUuid("patient-uuid")).thenReturn(patient);
         when(visitService.getActiveVisitsByPatient(patient)).thenReturn(Arrays.asList(visit));
         when(scheduleService.getScheduleByVisit(visit)).thenReturn(schedule);
+        when(scheduleService.saveSchedule(any())).thenReturn(schedule);
         when(orderService.getOrderByUuid("order-uuid")).thenReturn(order);
         when(conceptService.getConceptByName(ServiceType.AS_NEEDED_PLACEHOLDER.conceptName()))
                 .thenReturn(prnPlaceholderConcept);
