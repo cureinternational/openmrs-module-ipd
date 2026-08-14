@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RunWith(MockitoJUnitRunner.class)
 public class SlotTimeCreationServiceTest {
@@ -35,6 +36,35 @@ public class SlotTimeCreationServiceTest {
                 .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.FIXED_SCHEDULE_FREQUENCY)
                 .dayWiseSlotsStartTime(dayWise)
                 .build();
+    }
+
+    // Helper to create DrugOrder with dosingInstructions for triggering bucketSlots path
+    private DrugOrder createDrugOrderWithFixedSchedule(int sequence) throws Exception {
+        DrugOrder order = org.mockito.Mockito.mock(DrugOrder.class, org.mockito.Mockito.withSettings().lenient());
+        String dosingInstructions = String.format(
+                "[{\"sequence\":%d,\"timing\":{\"repeat\":{\"count\":2},\"code\":{\"text\":\"Fixed Schedule\"}}}]",
+                sequence
+        );
+        org.mockito.Mockito.when(order.getDosingInstructions()).thenReturn(dosingInstructions);
+        org.mockito.Mockito.when(order.getUuid()).thenReturn("test-uuid-" + sequence);
+        return order;
+    }
+
+    // Helper to create Slot with DrugOrder that triggers bucketSlots logic
+    private Slot makeSlotWithBucketingOrder(int sequence, LocalDateTime startDateTime, DrugOrder order) {
+        Slot slot = org.mockito.Mockito.mock(Slot.class, org.mockito.Mockito.withSettings().lenient());
+        Schedule schedule = org.mockito.Mockito.mock(Schedule.class, org.mockito.Mockito.withSettings().lenient());
+
+        org.mockito.Mockito.when(slot.getVariableDosageSequence()).thenReturn(sequence);
+        org.mockito.Mockito.when(slot.getStartDateTime()).thenReturn(startDateTime);
+        org.mockito.Mockito.when(slot.getSchedule()).thenReturn(schedule);
+        org.mockito.Mockito.when(slot.getStatus()).thenReturn(Slot.SlotStatus.SCHEDULED);
+        org.mockito.Mockito.when(slot.getMedicationAdministration()).thenReturn(null);
+        org.mockito.Mockito.when(slot.getNotes()).thenReturn(null);
+        org.mockito.Mockito.when(slot.getOriginDoseBucket()).thenReturn(null);
+        org.mockito.Mockito.when(slot.getOrder()).thenReturn(order);
+
+        return slot;
     }
 
     private List<Long> futureEpochList(int count) {
@@ -64,6 +94,7 @@ public class SlotTimeCreationServiceTest {
         }
         return crossingSlots;
     }
+
 
     // -----------------------------------------------------------------------
     // Core API Tests - createSlotsStartTimeFrom with SlotTimeCreationResult
@@ -302,122 +333,72 @@ public class SlotTimeCreationServiceTest {
     }
 
     // -----------------------------------------------------------------------
-    // Bucketing Tests - routes slots into firstDay, dayWise, remaining buckets
+    // Bucketing Tests - routes slots via bucketSlots logic for FIXED_SCHEDULE
     // -----------------------------------------------------------------------
 
     @Test
-    public void shouldBucketUniformDays_AsDayWise() {
-        // 2 days x 2 slots each (no partial first day, no crossing slots)
-        List<Slot> slots = new ArrayList<>();
-        Slot s1 = new Slot();
-        s1.setStartDateTime(LocalDateTime.of(2026, 8, 1, 8, 0));
-        s1.setSchedule(new Schedule());
-        slots.add(s1);
+    public void shouldBucketSingleDay_AsDayWise() throws Exception {
+        // Single day with 2 slots - produces dayWise only
+        DrugOrder order = createDrugOrderWithFixedSchedule(1);
+        Slot s1 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 8, 0), order);
+        Slot s2 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 20, 0), order);
 
-        Slot s2 = new Slot();
-        s2.setStartDateTime(LocalDateTime.of(2026, 8, 1, 20, 0));
-        s2.setSchedule(new Schedule());
-        slots.add(s2);
-
-        Slot s3 = new Slot();
-        s3.setStartDateTime(LocalDateTime.of(2026, 8, 2, 8, 0));
-        s3.setSchedule(new Schedule());
-        slots.add(s3);
-
-        Slot s4 = new Slot();
-        s4.setStartDateTime(LocalDateTime.of(2026, 8, 2, 20, 0));
-        s4.setSchedule(new Schedule());
-        slots.add(s4);
-
-        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(slots);
+        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result =
+                slotTimeCreationService.buildStageSchedules(Arrays.asList(s1, s2));
 
         assertNotNull("Result should not be null", result);
-        assertTrue("Should have day-wise slots", result.get(0).getDayWiseSlotsStartTime() != null && !result.get(0).getDayWiseSlotsStartTime().isEmpty());
-        assertNull("Should not have first-day slots for uniform days", result.get(0).getFirstDaySlotsStartTime());
+        assertFalse("Result should not be empty", result.isEmpty());
+        assertNotNull("Single day should produce dayWise slots", result.get(0).getDayWiseSlotsStartTime());
+        assertEquals("DayWise should have 2 slots", 2, result.get(0).getDayWiseSlotsStartTime().size());
+        assertNull("Should not have firstDay slots for single day", result.get(0).getFirstDaySlotsStartTime());
+        assertNull("Should not have remaining slots for single day", result.get(0).getRemainingDaySlotsStartTime());
     }
 
     @Test
-    public void shouldBucketNonUniformFirstDay_WithRemainingDay() {
-        // Day 1: 2 slots, Day 2: 3 slots (non-uniform)
-        List<Slot> slots = new ArrayList<>();
-        Slot s1 = new Slot();
-        s1.setStartDateTime(LocalDateTime.of(2026, 8, 1, 14, 0));
-        s1.setSchedule(new Schedule());
-        slots.add(s1);
+    public void shouldBucketNonUniformDays_AsFirstDayAndRemaining() throws Exception {
+        // Day 1: 2 slots, Day 2: 3 slots - produces firstDay + remaining
+        DrugOrder order = createDrugOrderWithFixedSchedule(1);
+        Slot s1 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 14, 0), order);
+        Slot s2 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 20, 0), order);
+        Slot s3 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 2, 8, 0), order);
+        Slot s4 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 2, 14, 0), order);
+        Slot s5 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 2, 20, 0), order);
 
-        Slot s2 = new Slot();
-        s2.setStartDateTime(LocalDateTime.of(2026, 8, 1, 20, 0));
-        s2.setSchedule(new Schedule());
-        slots.add(s2);
-
-        Slot s3 = new Slot();
-        s3.setStartDateTime(LocalDateTime.of(2026, 8, 2, 8, 0));
-        s3.setSchedule(new Schedule());
-        slots.add(s3);
-
-        Slot s4 = new Slot();
-        s4.setStartDateTime(LocalDateTime.of(2026, 8, 2, 14, 0));
-        s4.setSchedule(new Schedule());
-        slots.add(s4);
-
-        Slot s5 = new Slot();
-        s5.setStartDateTime(LocalDateTime.of(2026, 8, 2, 20, 0));
-        s5.setSchedule(new Schedule());
-        slots.add(s5);
-
-        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(slots);
+        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result =
+                slotTimeCreationService.buildStageSchedules(Arrays.asList(s1, s2, s3, s4, s5));
 
         assertNotNull("Result should not be null", result);
-        assertTrue("Should have first-day slots for partial first day", result.get(0).getFirstDaySlotsStartTime() != null && !result.get(0).getFirstDaySlotsStartTime().isEmpty());
-        assertTrue("Should have remaining-day slots", result.get(0).getRemainingDaySlotsStartTime() != null && !result.get(0).getRemainingDaySlotsStartTime().isEmpty());
-        assertNull("Should not have day-wise slots when first day is non-uniform", result.get(0).getDayWiseSlotsStartTime());
+        assertFalse("Result should not be empty", result.isEmpty());
+        assertNotNull("Non-uniform days should have firstDay slots", result.get(0).getFirstDaySlotsStartTime());
+        assertEquals("FirstDay should have 2 slots from day 1", 2, result.get(0).getFirstDaySlotsStartTime().size());
+        assertNotNull("Non-uniform days should have remaining slots", result.get(0).getRemainingDaySlotsStartTime());
+        assertEquals("Remaining should have 3 slots from day 2", 3, result.get(0).getRemainingDaySlotsStartTime().size());
+        assertNull("Should not have dayWise slots when pattern is non-uniform", result.get(0).getDayWiseSlotsStartTime());
     }
 
     @Test
-    public void shouldBucketMultipleDaysWithMixedPatterns() {
-        // Day 1: 2 slots, Day 2: 3 slots, Day 3: 2 slots (3+ days with mixed patterns)
-        List<Slot> slots = new ArrayList<>();
+    public void shouldBucketMultipleDays_WithDayWiseMiddlePattern() throws Exception {
+        // Day 1: 2 slots, Day 2: 3 slots, Day 3: 2 slots
+        // Produces: firstDay (day 1) + dayWise (day 2) + remaining (day 3)
+        DrugOrder order = createDrugOrderWithFixedSchedule(1);
+        Slot s1 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 14, 0), order);
+        Slot s2 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 20, 0), order);
+        Slot s3 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 2, 8, 0), order);
+        Slot s4 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 2, 14, 0), order);
+        Slot s5 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 2, 20, 0), order);
+        Slot s6 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 3, 8, 0), order);
+        Slot s7 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 3, 20, 0), order);
 
-        Slot s1 = new Slot();
-        s1.setStartDateTime(LocalDateTime.of(2026, 8, 1, 14, 0));
-        s1.setSchedule(new Schedule());
-        slots.add(s1);
-
-        Slot s2 = new Slot();
-        s2.setStartDateTime(LocalDateTime.of(2026, 8, 1, 20, 0));
-        s2.setSchedule(new Schedule());
-        slots.add(s2);
-
-        Slot s3 = new Slot();
-        s3.setStartDateTime(LocalDateTime.of(2026, 8, 2, 8, 0));
-        s3.setSchedule(new Schedule());
-        slots.add(s3);
-
-        Slot s4 = new Slot();
-        s4.setStartDateTime(LocalDateTime.of(2026, 8, 2, 14, 0));
-        s4.setSchedule(new Schedule());
-        slots.add(s4);
-
-        Slot s5 = new Slot();
-        s5.setStartDateTime(LocalDateTime.of(2026, 8, 2, 20, 0));
-        s5.setSchedule(new Schedule());
-        slots.add(s5);
-
-        Slot s6 = new Slot();
-        s6.setStartDateTime(LocalDateTime.of(2026, 8, 3, 8, 0));
-        s6.setSchedule(new Schedule());
-        slots.add(s6);
-
-        Slot s7 = new Slot();
-        s7.setStartDateTime(LocalDateTime.of(2026, 8, 3, 20, 0));
-        s7.setSchedule(new Schedule());
-        slots.add(s7);
-
-        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(slots);
+        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result =
+                slotTimeCreationService.buildStageSchedules(Arrays.asList(s1, s2, s3, s4, s5, s6, s7));
 
         assertNotNull("Result should not be null", result);
-        assertTrue("Should have first-day slots", result.get(0).getFirstDaySlotsStartTime() != null && !result.get(0).getFirstDaySlotsStartTime().isEmpty());
-        assertTrue("Should have day-wise slots for repeated middle pattern", result.get(0).getDayWiseSlotsStartTime() != null && !result.get(0).getDayWiseSlotsStartTime().isEmpty());
-        assertTrue("Should have remaining-day slots for non-uniform final day", result.get(0).getRemainingDaySlotsStartTime() != null && !result.get(0).getRemainingDaySlotsStartTime().isEmpty());
+        assertFalse("Result should not be empty", result.isEmpty());
+        assertNotNull("Multi-day pattern should have firstDay slots", result.get(0).getFirstDaySlotsStartTime());
+        assertEquals("FirstDay should have 2 slots from day 1", 2, result.get(0).getFirstDaySlotsStartTime().size());
+        assertNotNull("Multi-day pattern should have dayWise slots (middle repeating day)", result.get(0).getDayWiseSlotsStartTime());
+        assertEquals("DayWise should have 3 slots from day 2", 3, result.get(0).getDayWiseSlotsStartTime().size());
+        assertNotNull("Multi-day pattern should have remaining slots", result.get(0).getRemainingDaySlotsStartTime());
+        assertEquals("Remaining should have 2 slots from day 3", 2, result.get(0).getRemainingDaySlotsStartTime().size());
     }
 }
