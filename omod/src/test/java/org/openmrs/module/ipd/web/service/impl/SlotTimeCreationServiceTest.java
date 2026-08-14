@@ -300,4 +300,124 @@ public class SlotTimeCreationServiceTest {
         assertNotNull("Result should not be null", result);
         assertEquals("Should infer from request when dose is null", 3, result.getSlotsStartTime().size());
     }
+
+    // -----------------------------------------------------------------------
+    // Bucketing Tests - routes slots into firstDay, dayWise, remaining buckets
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void shouldBucketUniformDays_AsDayWise() {
+        // 2 days x 2 slots each (no partial first day, no crossing slots)
+        List<Slot> slots = new ArrayList<>();
+        Slot s1 = new Slot();
+        s1.setStartDateTime(LocalDateTime.of(2026, 8, 1, 8, 0));
+        s1.setSchedule(new Schedule());
+        slots.add(s1);
+
+        Slot s2 = new Slot();
+        s2.setStartDateTime(LocalDateTime.of(2026, 8, 1, 20, 0));
+        s2.setSchedule(new Schedule());
+        slots.add(s2);
+
+        Slot s3 = new Slot();
+        s3.setStartDateTime(LocalDateTime.of(2026, 8, 2, 8, 0));
+        s3.setSchedule(new Schedule());
+        slots.add(s3);
+
+        Slot s4 = new Slot();
+        s4.setStartDateTime(LocalDateTime.of(2026, 8, 2, 20, 0));
+        s4.setSchedule(new Schedule());
+        slots.add(s4);
+
+        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(slots);
+
+        assertNotNull("Result should not be null", result);
+        assertTrue("Should have day-wise slots", result.get(0).getDayWiseSlotsStartTime() != null && !result.get(0).getDayWiseSlotsStartTime().isEmpty());
+        assertNull("Should not have first-day slots for uniform days", result.get(0).getFirstDaySlotsStartTime());
+    }
+
+    @Test
+    public void shouldBucketNonUniformFirstDay_WithRemainingDay() {
+        // Day 1: 2 slots, Day 2: 3 slots (non-uniform)
+        List<Slot> slots = new ArrayList<>();
+        Slot s1 = new Slot();
+        s1.setStartDateTime(LocalDateTime.of(2026, 8, 1, 14, 0));
+        s1.setSchedule(new Schedule());
+        slots.add(s1);
+
+        Slot s2 = new Slot();
+        s2.setStartDateTime(LocalDateTime.of(2026, 8, 1, 20, 0));
+        s2.setSchedule(new Schedule());
+        slots.add(s2);
+
+        Slot s3 = new Slot();
+        s3.setStartDateTime(LocalDateTime.of(2026, 8, 2, 8, 0));
+        s3.setSchedule(new Schedule());
+        slots.add(s3);
+
+        Slot s4 = new Slot();
+        s4.setStartDateTime(LocalDateTime.of(2026, 8, 2, 14, 0));
+        s4.setSchedule(new Schedule());
+        slots.add(s4);
+
+        Slot s5 = new Slot();
+        s5.setStartDateTime(LocalDateTime.of(2026, 8, 2, 20, 0));
+        s5.setSchedule(new Schedule());
+        slots.add(s5);
+
+        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(slots);
+
+        assertNotNull("Result should not be null", result);
+        assertTrue("Should have first-day slots for partial first day", result.get(0).getFirstDaySlotsStartTime() != null && !result.get(0).getFirstDaySlotsStartTime().isEmpty());
+        assertTrue("Should have remaining-day slots", result.get(0).getRemainingDaySlotsStartTime() != null && !result.get(0).getRemainingDaySlotsStartTime().isEmpty());
+        assertNull("Should not have day-wise slots when first day is non-uniform", result.get(0).getDayWiseSlotsStartTime());
+    }
+
+    @Test
+    public void shouldBucketMultipleDaysWithMixedPatterns() {
+        // Day 1: 2 slots, Day 2: 3 slots, Day 3: 2 slots (3+ days with mixed patterns)
+        List<Slot> slots = new ArrayList<>();
+
+        Slot s1 = new Slot();
+        s1.setStartDateTime(LocalDateTime.of(2026, 8, 1, 14, 0));
+        s1.setSchedule(new Schedule());
+        slots.add(s1);
+
+        Slot s2 = new Slot();
+        s2.setStartDateTime(LocalDateTime.of(2026, 8, 1, 20, 0));
+        s2.setSchedule(new Schedule());
+        slots.add(s2);
+
+        Slot s3 = new Slot();
+        s3.setStartDateTime(LocalDateTime.of(2026, 8, 2, 8, 0));
+        s3.setSchedule(new Schedule());
+        slots.add(s3);
+
+        Slot s4 = new Slot();
+        s4.setStartDateTime(LocalDateTime.of(2026, 8, 2, 14, 0));
+        s4.setSchedule(new Schedule());
+        slots.add(s4);
+
+        Slot s5 = new Slot();
+        s5.setStartDateTime(LocalDateTime.of(2026, 8, 2, 20, 0));
+        s5.setSchedule(new Schedule());
+        slots.add(s5);
+
+        Slot s6 = new Slot();
+        s6.setStartDateTime(LocalDateTime.of(2026, 8, 3, 8, 0));
+        s6.setSchedule(new Schedule());
+        slots.add(s6);
+
+        Slot s7 = new Slot();
+        s7.setStartDateTime(LocalDateTime.of(2026, 8, 3, 20, 0));
+        s7.setSchedule(new Schedule());
+        slots.add(s7);
+
+        List<org.openmrs.module.ipd.web.model.StageScheduleStatus> result = slotTimeCreationService.buildStageSchedules(slots);
+
+        assertNotNull("Result should not be null", result);
+        assertTrue("Should have first-day slots", result.get(0).getFirstDaySlotsStartTime() != null && !result.get(0).getFirstDaySlotsStartTime().isEmpty());
+        assertTrue("Should have day-wise slots for repeated middle pattern", result.get(0).getDayWiseSlotsStartTime() != null && !result.get(0).getDayWiseSlotsStartTime().isEmpty());
+        assertTrue("Should have remaining-day slots for non-uniform final day", result.get(0).getRemainingDaySlotsStartTime() != null && !result.get(0).getRemainingDaySlotsStartTime().isEmpty());
+    }
 }

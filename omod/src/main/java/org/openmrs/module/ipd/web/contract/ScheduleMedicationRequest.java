@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
+import lombok.Builder.Default;
 import org.openmrs.module.ipd.api.model.ServiceType;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.api.util.DateTimeUtil;
@@ -35,7 +36,8 @@ public class ScheduleMedicationRequest {
     private MedicationFrequency medicationFrequency;
     private ServiceType serviceType;
     private Integer variableDosageSequence;
-    private Boolean isUpdateCompleteSchedule;
+    @Default
+    private Boolean isUpdateCompleteSchedule = false;
 
     public enum MedicationFrequency {
         START_TIME_DURATION_FREQUENCY,

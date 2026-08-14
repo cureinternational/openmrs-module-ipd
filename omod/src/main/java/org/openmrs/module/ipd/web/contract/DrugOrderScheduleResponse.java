@@ -4,7 +4,6 @@ import lombok.*;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 import org.openmrs.module.ipd.web.model.StageScheduleStatus;
-import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -26,7 +25,6 @@ public class DrugOrderScheduleResponse {
     private Boolean allSlotsAttended;
     private String notes;
     private List<StageScheduleStatus> stageSchedules;
-    @JsonProperty("isUpdateCompleteSchedule")
     private Boolean isUpdateCompleteSchedule;
 
     public static DrugOrderScheduleResponse createFrom(DrugOrderSchedule drugOrderSchedule) {

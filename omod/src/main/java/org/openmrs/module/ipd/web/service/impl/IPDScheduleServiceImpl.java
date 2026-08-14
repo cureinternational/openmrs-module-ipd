@@ -94,7 +94,7 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
             savedSchedule = scheduleService.saveSchedule(schedule);
         }
         // Persist the user's toggle choice for "apply to all days" - critical for UI state restoration
-        savedSchedule.setIsUpdateCompleteSchedule(scheduleMedicationRequest.getIsUpdateCompleteSchedule() != null ? scheduleMedicationRequest.getIsUpdateCompleteSchedule() : false);
+        savedSchedule.setIsUpdateCompleteSchedule(scheduleMedicationRequest.getIsUpdateCompleteSchedule());
         savedSchedule = scheduleService.saveSchedule(savedSchedule);
         DrugOrder order = (DrugOrder) orderService.getOrderByUuid(scheduleMedicationRequest.getOrderUuid());
         ServiceType serviceType = scheduleMedicationRequest.getServiceType() !=null ? scheduleMedicationRequest.getServiceType() : ServiceType.MEDICATION_REQUEST;
