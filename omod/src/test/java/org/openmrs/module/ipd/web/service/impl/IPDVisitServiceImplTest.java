@@ -91,7 +91,7 @@ public class IPDVisitServiceImplTest {
     }
 
     @Test
-    public void shouldStopCollecting_AfterFirstClosedIPDVisit() throws Exception {
+    public void shouldIncludeAllPrecedingVisits_AfterFirstClosedIPDVisit() throws Exception {
         Visit currentVisit = visit("current-uuid", "IPD", now(), null);
         Visit opdVisit = visit("opd-uuid", "OPD", now() - HOUR, null);
         Visit closedIPDVisit = visit("closed-ipd-uuid", "IPD", now() - 2 * HOUR, now() - HOUR);
@@ -100,18 +100,31 @@ public class IPDVisitServiceImplTest {
         when(visitService.getVisitsByPatient(patient)).thenReturn(
                 Arrays.asList(labVisitAfterClosedIPD, closedIPDVisit, opdVisit, currentVisit));
 
-        assertEquals(Arrays.asList("opd-uuid", "closed-ipd-uuid"), getPrecedingVisitUuids("current-uuid"));
+        assertEquals(Arrays.asList("opd-uuid", "closed-ipd-uuid", "lab-visit-uuid"), getPrecedingVisitUuids("current-uuid"));
     }
 
     @Test
-    public void shouldSkipVisitTypes_NotInOutpatientList() throws Exception {
+    public void shouldIncludeEveryPrecedingVisit_RegardlessOfType() throws Exception {
         Visit currentVisit = visit("current-uuid", "IPD", now(), null);
         Visit otherVisit = visit("other-uuid", "OTHER", now() - HOUR, null);
         Visit opdVisit = visit("opd-uuid", "OPD", now() - 2 * HOUR, null);
 
         when(visitService.getVisitsByPatient(patient)).thenReturn(Arrays.asList(opdVisit, otherVisit, currentVisit));
 
-        assertEquals(Arrays.asList("opd-uuid"), getPrecedingVisitUuids("current-uuid"));
+        assertEquals(Arrays.asList("other-uuid", "opd-uuid"), getPrecedingVisitUuids("current-uuid"));
+    }
+
+    @Test
+    public void shouldIncludeAllPrecedingClosedIPDVisits_WhenMultiplePriorAdmissions() throws Exception {
+        Visit currentVisit = visit("current-uuid", "IPD", now(), null);
+        Visit closedIPDVisit2 = visit("closed-ipd-2-uuid", "IPD", now() - HOUR, now() - HOUR / 2);
+        Visit closedIPDVisit1 = visit("closed-ipd-1-uuid", "IPD", now() - 2 * HOUR, now() - HOUR);
+        Visit opdVisit = visit("opd-uuid", "OPD", now() - 3 * HOUR, null);
+
+        when(visitService.getVisitsByPatient(patient)).thenReturn(
+                Arrays.asList(opdVisit, closedIPDVisit1, closedIPDVisit2, currentVisit));
+
+        assertEquals(Arrays.asList("closed-ipd-2-uuid", "closed-ipd-1-uuid", "opd-uuid"), getPrecedingVisitUuids("current-uuid"));
     }
 
     @Test

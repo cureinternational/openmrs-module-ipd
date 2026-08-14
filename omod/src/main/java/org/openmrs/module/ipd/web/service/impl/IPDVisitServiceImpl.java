@@ -19,7 +19,6 @@ import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.api.model.*;
 import org.openmrs.module.ipd.api.service.ReferenceService;
 import org.openmrs.module.ipd.api.service.SlotService;
-import org.openmrs.module.ipd.api.util.IPDConstants;
 import org.openmrs.module.ipd.web.service.IPDVisitService;
 import org.openmrs.module.ipd.web.service.IPDScheduleService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,9 +72,9 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         visitUuidsList.add(visitUuid);
         Visit visit = visitService.getVisitByUuid(visitUuid);
         if (visit == null) return Collections.emptyList();
-        // Fetch drug orders from preceding OPD and preceding closed IPD visits.
-        // OPD: covers same-day OPD-to-IPD emergency conversions.
-        // Closed IPD: covers active drugs from the patient's most recent prior admission.
+        // Fetch drug orders from all preceding visits (IPD, OPD, In Absentia, Lab, etc.)
+        // so that any still-active medication remains visible in this visit.
+        // Inactive orders are filtered out in getIPDDrugOrders via the effectiveStopDate check.
         visitUuidsList.addAll(getPrecedingVisitUuids(visit.getPatient(), visitUuid));
 
         List<DrugOrder> prescribedDrugOrders = drugOrderService.getPrescribedDrugOrders(
@@ -193,22 +192,13 @@ public class IPDVisitServiceImpl implements IPDVisitService {
                 .orElse(-1);
 
         if (currentVisitIndex == -1) return result;
-        final Set<String> OUTPATIENT_VISIT_TYPES = new HashSet<>(Arrays.asList(
-            IPDConstants.OPD_VISIT_TYPE,
-            IPDConstants.IN_ABSENTIA_VISIT_TYPE,
-            IPDConstants.LAB_VISIT_TYPE));
 
-        boolean foundClosedIPD = false;
+        // Include every preceding visit regardless of type (IPD, OPD, In Absentia, Lab, etc.)
+        // so that any still-active medication stays visible in this and future visits.
+        // Ended/stopped orders are already filtered out downstream in getIPDDrugOrders()
+        // via the effectiveStopDate check.
         for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
-            Visit v = sortedVisits.get(i);
-            if (foundClosedIPD) break;
-            String visitType = v.getVisitType().getName();
-            if (OUTPATIENT_VISIT_TYPES.contains(visitType)) {
-                result.add(v.getUuid());
-            } else if (IPDConstants.IPD_VISIT_TYPE.equals(visitType) && v.getStopDatetime() != null) {
-                result.add(v.getUuid());
-                foundClosedIPD = true;
-            }
+            result.add(sortedVisits.get(i).getUuid());
         }
         return result;
     }
