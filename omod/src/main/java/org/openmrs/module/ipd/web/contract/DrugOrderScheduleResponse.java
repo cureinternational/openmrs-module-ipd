@@ -18,12 +18,14 @@ public class DrugOrderScheduleResponse {
     private List<Long> firstDaySlotsStartTime;
     private List<Long> dayWiseSlotsStartTime;
     private List<Long> remainingDaySlotsStartTime;
+    private List<CrossingSlotDTO> crossingSlots;
     private Long slotStartTime;
     private Boolean medicationAdministrationStarted;
     private Boolean pendingSlotsAvailable;
     private Boolean allSlotsAttended;
     private String notes;
     private List<StageScheduleStatus> stageSchedules;
+    private Boolean isUpdateCompleteSchedule;
 
     public static DrugOrderScheduleResponse createFrom(DrugOrderSchedule drugOrderSchedule) {
         List<Slot> slots = drugOrderSchedule.getSlots() != null ? drugOrderSchedule.getSlots() : Collections.emptyList();
@@ -32,6 +34,7 @@ public class DrugOrderScheduleResponse {
             .firstDaySlotsStartTime(drugOrderSchedule.getFirstDaySlotsStartTime())
             .dayWiseSlotsStartTime(drugOrderSchedule.getDayWiseSlotsStartTime())
             .remainingDaySlotsStartTime(drugOrderSchedule.getRemainingDaySlotsStartTime())
+            .crossingSlots(drugOrderSchedule.getCrossingSlots())
             .slotStartTime(drugOrderSchedule.getSlotStartTime())
             .medicationAdministrationStarted(slots.stream().anyMatch(slot -> slot.getMedicationAdministration() != null))
             .allSlotsAttended(!slots.stream().anyMatch(slot -> slot.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
@@ -41,6 +44,7 @@ public class DrugOrderScheduleResponse {
                 slot.getStatus().equals(Slot.SlotStatus.SCHEDULED)))
             .notes(slots.isEmpty() ? null : slots.get(0).getNotes())
             .stageSchedules(drugOrderSchedule.getStageSchedules())
+            .isUpdateCompleteSchedule(drugOrderSchedule.getIsUpdateCompleteSchedule())
             .build();
     }
 }

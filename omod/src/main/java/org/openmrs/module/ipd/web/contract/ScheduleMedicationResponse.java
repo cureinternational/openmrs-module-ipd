@@ -21,6 +21,7 @@ public class ScheduleMedicationResponse {
     private long startDate;
     private Object endDate;
     private Object order;
+    private Boolean isUpdateCompleteSchedule;
 
     public static ScheduleMedicationResponse constructFrom(Schedule schedule) {
         return ScheduleMedicationResponse.builder()
@@ -30,6 +31,7 @@ public class ScheduleMedicationResponse {
 //          .order(ConversionUtil.convertToRepresentation(schedule.getOrder(), Representation.REF)) // TODO. Clarify why we need to use REF here with product team
                 .startDate(convertLocalDateTimeToUTCEpoc(schedule.getStartDate()))
                 .endDate(schedule.getEndDate() != null ? convertLocalDateTimeToUTCEpoc(schedule.getEndDate()) : null)
+                .isUpdateCompleteSchedule(schedule.getIsUpdateCompleteSchedule())
                 .build();
     }
 }

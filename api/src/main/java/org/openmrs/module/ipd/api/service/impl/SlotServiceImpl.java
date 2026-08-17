@@ -74,6 +74,12 @@ public class SlotServiceImpl extends BaseOpenmrsService implements SlotService {
 	}
 
 	@Override
+	public List<Slot> getSlotsBySubjectReferenceIdAndOrderUuids(Reference subject, List<String> orderUuids) {
+		Concept asNeededPlaceholderServiceType = conceptService.getConceptByName(ServiceType.AS_NEEDED_PLACEHOLDER.conceptName());
+		return slotDAO.getSlotsBySubjectReferenceIdAndOrderUuids(subject, asNeededPlaceholderServiceType, orderUuids);
+	}
+
+	@Override
 	public void voidSlot(Slot slot, String voidReason) throws APIException  {
 		slot.setVoided(true);
 		slot.setVoidedBy(Context.getAuthenticatedUser());

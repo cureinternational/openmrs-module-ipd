@@ -60,4 +60,7 @@ public class Schedule extends BaseChangeableOpenmrsData {
 
 	@Column(name = "comments")
 	private String comments;
+
+	@Column(name = "update_complete_schedule")
+	private Boolean isUpdateCompleteSchedule;
 }

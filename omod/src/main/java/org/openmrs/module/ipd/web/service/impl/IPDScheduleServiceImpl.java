@@ -1,5 +1,7 @@
 package org.openmrs.module.ipd.web.service.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmrs.*;
 import org.openmrs.api.APIException;
 import org.openmrs.api.ConceptService;
@@ -20,8 +22,10 @@ import org.openmrs.module.ipd.api.util.IPDConstants;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.factory.ScheduleFactory;
 import org.openmrs.module.ipd.web.factory.SlotFactory;
+import org.openmrs.module.ipd.web.model.SlotCrossingMetadata;
 import org.openmrs.module.ipd.web.model.PrescribedOrderSlotSummary;
 import org.openmrs.module.ipd.web.model.PatientMedicationSummary;
+import org.openmrs.module.ipd.web.model.SlotTimeCreationResult;
 import org.openmrs.module.ipd.web.service.IPDScheduleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -63,6 +67,23 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
         this.orderService = orderService;
     }
 
+    /**
+     * Creates and persists medication schedule with all slots and user preferences.
+     *
+     * Key steps:
+     * 1. Get or create visit-level Schedule entity
+     * 2. Persist user's "apply to all days" toggle choice (isUpdateCompleteSchedule)
+     * 3. Create slots from frontend schedule request
+     * 4. Tag crossing slots with metadata (originDoseBucket, isRecurringAcrossDays)
+     * 5. Persist all slots to database
+     *
+     * The toggle choice is essential for UI state restoration - when user toggles "apply to all days"
+     * OFF then edits again, the backend must return the same toggle state so frontend restores
+     * the correct UI. This toggle is persisted at the Schedule level, not individual slots.
+     *
+     * @param scheduleMedicationRequest Request from frontend with slot times, toggle, and frequency
+     * @return Persisted Schedule with all slots and metadata
+     */
     @Override
     public Schedule saveMedicationSchedule(ScheduleMedicationRequest scheduleMedicationRequest) {
         Patient patient = patientService.getPatientByUuid(scheduleMedicationRequest.getPatientUuid());
@@ -72,18 +93,36 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
             Schedule schedule = scheduleFactory.createScheduleForMedicationFrom(scheduleMedicationRequest, visit);
             savedSchedule = scheduleService.saveSchedule(schedule);
         }
+        // Persist the user's toggle choice for "apply to all days" - critical for UI state restoration
+        savedSchedule.setIsUpdateCompleteSchedule(scheduleMedicationRequest.getIsUpdateCompleteSchedule());
+        savedSchedule = scheduleService.saveSchedule(savedSchedule);
         DrugOrder order = (DrugOrder) orderService.getOrderByUuid(scheduleMedicationRequest.getOrderUuid());
         ServiceType serviceType = scheduleMedicationRequest.getServiceType() !=null ? scheduleMedicationRequest.getServiceType() : ServiceType.MEDICATION_REQUEST;
         if(serviceType.equals(ServiceType.MEDICATION_REQUEST)){
-            List<Slot> existingSlots = getMedicationSlots(patient.getUuid(), ServiceType.MEDICATION_REQUEST, new ArrayList<>(Arrays.asList(new String[]{order.getUuid()})));
-            boolean stageAlreadyScheduled = existingSlots != null && existingSlots.stream()
-                .anyMatch(s -> Objects.equals(s.getVariableDosageSequence(), scheduleMedicationRequest.getVariableDosageSequence()));
+            List<Slot> existingSlots = getMedicationSlots(patient.getUuid(),ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{order.getUuid()})));
+            boolean stageAlreadyScheduled;
+            if (scheduleMedicationRequest.getVariableDosageSequence() != null) {
+                stageAlreadyScheduled = existingSlots != null && existingSlots.stream()
+                        .anyMatch(s -> Objects.equals(s.getVariableDosageSequence(), scheduleMedicationRequest.getVariableDosageSequence()) && !s.getVoided());
+            } else {
+                stageAlreadyScheduled = existingSlots != null && existingSlots.stream()
+                        .anyMatch(s -> !s.getVoided());
+            }
             if (stageAlreadyScheduled) {
                 throw new APIException("Slots already created for this drug order");
             }
-            List<LocalDateTime> slotsStartTime = slotTimeCreationService.createSlotsStartTimeFrom(scheduleMedicationRequest, order);
-            slotFactory.createSlotsForMedicationFrom(savedSchedule, slotsStartTime, order, null, SCHEDULED, ServiceType.MEDICATION_REQUEST, scheduleMedicationRequest.getComments(), scheduleMedicationRequest.getVariableDosageSequence())
-                    .forEach(slotService::saveSlot);
+            SlotTimeCreationResult slotTimeCreationResult = slotTimeCreationService.createSlotsStartTimeFrom(scheduleMedicationRequest, order);
+            List<Slot> slots = slotFactory.createSlotsForMedicationFrom(
+                    savedSchedule,
+                    slotTimeCreationResult.getSlotsStartTime(),
+                    order,
+                    null,
+                    SCHEDULED,
+                    ServiceType.MEDICATION_REQUEST,
+                    scheduleMedicationRequest.getComments(),
+                    scheduleMedicationRequest.getVariableDosageSequence());
+            tagCrossingSlots(slots, slotTimeCreationResult.getCrossingTagsByStartTime());
+            slots.forEach(slotService::saveSlot);
         }
         else if (serviceType.equals(ServiceType.AS_NEEDED_PLACEHOLDER)){
             List<Slot> existingPlaceholders = getMedicationSlots(
@@ -130,15 +169,32 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
 
     @Override
     public Schedule updateMedicationSchedule(ScheduleMedicationRequest scheduleMedicationRequest) {
-        voidExistingMedicationSlotsForOrder(scheduleMedicationRequest.getPatientUuid(), scheduleMedicationRequest.getOrderUuid(), IPDConstants.EDIT_DRUG_CHART_VOID_REASON, scheduleMedicationRequest.getVariableDosageSequence());
+        voidExistingMedicationSlotsForOrder(
+                scheduleMedicationRequest.getPatientUuid(),
+                scheduleMedicationRequest.getOrderUuid(),
+                IPDConstants.EDIT_DRUG_CHART_VOID_REASON,
+                scheduleMedicationRequest.getVariableDosageSequence());
         return saveMedicationSchedule(scheduleMedicationRequest);
     }
 
-    private void voidExistingMedicationSlotsForOrder(String patientUuid, String orderUuid, String voidReason, Integer variableDosageSequence) {
-        List<Slot> existingSlots = getMedicationSlots(patientUuid, ServiceType.MEDICATION_REQUEST, new ArrayList<>(Arrays.asList(new String[]{orderUuid})));
+    private void voidExistingMedicationSlotsForOrder(String patientUuid,String orderUuid,String voidReason, Integer variableDosageSequence){
+        List<Slot> existingSlots = getMedicationSlots(patientUuid,ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{orderUuid})));
         existingSlots.stream()
-            .filter(s -> Objects.equals(s.getVariableDosageSequence(), variableDosageSequence))
-            .forEach(slot -> slotService.voidSlot(slot, voidReason));
+                .filter(slot -> variableDosageSequence == null || Objects.equals(slot.getVariableDosageSequence(), variableDosageSequence))
+                .forEach(slot -> slotService.voidSlot(slot,voidReason));
+    }
+
+    private void tagCrossingSlots(List<Slot> slots, Map<LocalDateTime, SlotCrossingMetadata> crossingTagsByStartTime) {
+        if (crossingTagsByStartTime == null || crossingTagsByStartTime.isEmpty()) {
+            return;
+        }
+        slots.forEach(slot -> {
+            SlotCrossingMetadata tag = crossingTagsByStartTime.get(slot.getStartDateTime());
+            if (tag != null) {
+                slot.setOriginDoseBucket(tag.getOriginDoseBucket());
+                slot.setIsRecurringAcrossDays(tag.getIsRecurringAcrossDays());
+            }
+        });
     }
 
 

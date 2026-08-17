@@ -117,6 +117,15 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         List<Slot> slots = ipdScheduleService.getMedicationSlots(patientUuid, ServiceType.MEDICATION_REQUEST,orderUuids);
         List<Slot> prnSlots = ipdScheduleService.getMedicationSlots(patientUuid, ServiceType.AS_NEEDED_MEDICATION_REQUEST,orderUuids);
         slots.addAll(prnSlots);
+
+        if (slots.isEmpty()) {
+            Optional<Reference> subjectReference = referenceService.getReferenceByTypeAndTargetUUID(Patient.class.getTypeName(), patientUuid);
+            if (subjectReference.isPresent()) {
+                // Legacy fallback for older saved schedules that do not surface through the service-specific queries.
+                slots = slotService.getSlotsBySubjectReferenceIdAndOrderUuids(subjectReference.get(), orderUuids);
+            }
+        }
+
         Map<DrugOrder, List<Slot>> groupedByOrders = slots.stream()
                 .collect(Collectors.groupingBy(slot -> (DrugOrder) slot.getOrder()));
 
