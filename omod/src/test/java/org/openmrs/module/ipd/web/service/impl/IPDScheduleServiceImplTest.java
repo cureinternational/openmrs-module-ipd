@@ -327,4 +327,96 @@ public class IPDScheduleServiceImplTest {
 
         verify(slotService, times(2)).voidSlot(any(), any());
     }
+
+    @Test
+    public void shouldReturnMedicationSlots_ByPatientAndServiceType() {
+        Slot slot = new Slot();
+        slot.setUuid("slot-uuid");
+
+        when(slotService.getSlotsBySubjectReferenceIdAndServiceType(patientReference, medicationRequestConcept))
+                .thenReturn(Arrays.asList(slot));
+
+        java.util.List<Slot> result = service.getMedicationSlots("patient-uuid", ServiceType.MEDICATION_REQUEST);
+
+        assertNotNull("Slots should not be null", result);
+        assert(result.size() == 1);
+        verify(slotService).getSlotsBySubjectReferenceIdAndServiceType(patientReference, medicationRequestConcept);
+    }
+
+    @Test
+    public void shouldReturnMedicationSlots_ByPatientServiceTypeAndDate() {
+        Slot slot = new Slot();
+        slot.setUuid("slot-uuid");
+        java.time.LocalDate date = java.time.LocalDate.now();
+
+        when(slotService.getSlotsBySubjectReferenceIdAndForDateAndServiceType(patientReference, date, medicationRequestConcept))
+                .thenReturn(Arrays.asList(slot));
+
+        java.util.List<Slot> result = service.getMedicationSlots("patient-uuid", ServiceType.MEDICATION_REQUEST, date);
+
+        assertNotNull("Slots should not be null", result);
+        assert(result.size() == 1);
+        verify(slotService).getSlotsBySubjectReferenceIdAndForDateAndServiceType(patientReference, date, medicationRequestConcept);
+    }
+
+    @Test
+    public void shouldReturnMedicationSlots_ByPatientServiceTypeAndOrderUuids() {
+        Slot slot = new Slot();
+        slot.setUuid("slot-uuid");
+        java.util.List<String> orderUuids = Arrays.asList("order-uuid");
+
+        when(slotService.getSlotsBySubjectReferenceIdAndServiceTypeAndOrderUuids(patientReference, medicationRequestConcept, orderUuids))
+                .thenReturn(Arrays.asList(slot));
+
+        java.util.List<Slot> result = service.getMedicationSlots("patient-uuid", ServiceType.MEDICATION_REQUEST, orderUuids);
+
+        assertNotNull("Slots should not be null", result);
+        assert(result.size() == 1);
+        verify(slotService).getSlotsBySubjectReferenceIdAndServiceTypeAndOrderUuids(patientReference, medicationRequestConcept, orderUuids);
+    }
+
+    @Test
+    public void shouldReturnEmptySlots_WhenReferenceNotFound() {
+        when(referenceService.getReferenceByTypeAndTargetUUID(Patient.class.getTypeName(), "patient-uuid"))
+                .thenReturn(Optional.empty());
+
+        java.util.List<Slot> result = service.getMedicationSlots("patient-uuid", ServiceType.MEDICATION_REQUEST);
+
+        assertNotNull("Should return empty list, not null", result);
+        assert(result.isEmpty());
+    }
+
+    @Test
+    public void shouldReturnMedicationSlots_ForGivenTimeFrame() {
+        Slot slot = new Slot();
+        slot.setUuid("slot-uuid");
+        LocalDateTime startDate = LocalDateTime.now();
+        LocalDateTime endDate = LocalDateTime.now().plusDays(7);
+
+        when(slotService.getSlotsBySubjectReferenceIdAndForTheGivenTimeFrame(patientReference, startDate, endDate, visit))
+                .thenReturn(Arrays.asList(slot));
+
+        java.util.List<Slot> result = service.getMedicationSlotsForTheGivenTimeFrame("patient-uuid", startDate, endDate, false, visit);
+
+        assertNotNull("Slots should not be null", result);
+        assert(result.size() == 1);
+        verify(slotService).getSlotsBySubjectReferenceIdAndForTheGivenTimeFrame(patientReference, startDate, endDate, visit);
+    }
+
+    @Test
+    public void shouldReturnMedicationSlots_ConsideringAdministeredTime() {
+        Slot slot = new Slot();
+        slot.setUuid("slot-uuid");
+        LocalDateTime startDate = LocalDateTime.now();
+        LocalDateTime endDate = LocalDateTime.now().plusDays(7);
+
+        when(slotService.getSlotsBySubjectReferenceIncludingAdministeredTimeFrame(patientReference, startDate, endDate, visit))
+                .thenReturn(Arrays.asList(slot));
+
+        java.util.List<Slot> result = service.getMedicationSlotsForTheGivenTimeFrame("patient-uuid", startDate, endDate, true, visit);
+
+        assertNotNull("Slots should not be null", result);
+        assert(result.size() == 1);
+        verify(slotService).getSlotsBySubjectReferenceIncludingAdministeredTimeFrame(patientReference, startDate, endDate, visit);
+    }
 }
