@@ -486,6 +486,15 @@
                 DATE_ADD(NOW(), INTERVAL 5 MINUTE), 'MM/dd/yyyy HH:mm:ss', 0, true, 1, NOW(), UUID()
             );
         </sql>
+    <changeSet id="20250603-add-variable-dosage-sequence-to-ipd-slot" author="SasikiranJ">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="ipd_slot" columnName="variable_dosage_sequence"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="ipd_slot">
+            <column name="variable_dosage_sequence" type="int"/>
+        </addColumn>
     </changeSet>
 
 </databaseChangeLog>

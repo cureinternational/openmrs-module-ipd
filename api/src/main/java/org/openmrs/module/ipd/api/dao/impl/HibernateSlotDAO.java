@@ -37,7 +37,7 @@ public class HibernateSlotDAO implements SlotDAO {
 
 	@Override
 	public Slot getSlotByUUID(String uuid) throws DAOException {
-		Slot s = (Slot)this.sessionFactory.getCurrentSession().createQuery("from Slot s where s.uuid = :uuid").setString("uuid", uuid).uniqueResult();
+		Slot s = (Slot)this.sessionFactory.getCurrentSession().createQuery("from Slot s where s.uuid = :uuid").setParameter("uuid", uuid).uniqueResult();
 		return s;
 	}
 
