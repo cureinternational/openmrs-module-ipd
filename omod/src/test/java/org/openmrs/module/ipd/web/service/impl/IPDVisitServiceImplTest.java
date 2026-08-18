@@ -14,8 +14,10 @@ import org.openmrs.Visit;
 import org.openmrs.VisitType;
 import org.openmrs.api.ConceptService;
 import org.openmrs.api.VisitService;
+import org.openmrs.module.ipd.api.model.Schedule;
 import org.openmrs.module.ipd.api.model.ServiceType;
 import org.openmrs.module.ipd.api.service.ReferenceService;
+import org.openmrs.module.ipd.api.service.ScheduleService;
 import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 import org.openmrs.module.ipd.web.service.IPDScheduleService;
@@ -32,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +54,7 @@ public class IPDVisitServiceImplTest {
     @Mock private ReferenceService referenceService;
     @Mock private VisitService visitService;
     @Mock private SlotService slotService;
+    @Mock private ScheduleService scheduleService;
 
     private Patient patient;
 
@@ -162,6 +166,59 @@ public class IPDVisitServiceImplTest {
         ArgumentCaptor<List<String>> visitUuidsCaptor = ArgumentCaptor.forClass(List.class);
         verify(drugOrderService).getPrescribedDrugOrders(visitUuidsCaptor.capture(), any(), any(), any(), any(), any(), any());
         assertEquals(Arrays.asList("current-uuid", "in-absentia-uuid", "lab-visit-uuid"), visitUuidsCaptor.getValue());
+    }
+
+    @Test
+    public void shouldSetUpdateCompleteScheduleAsTrue_WhenVisitScheduleFlagIsTrue() {
+        Visit currentVisit = visit("current-uuid", "IPD", now(), null);
+        Visit inAbsentiaVisit = visit("in-absentia-uuid", "In Absentia", now() - HOUR, null);
+
+        DrugOrderSchedule drugOrderSchedule = org.mockito.Mockito.mock(DrugOrderSchedule.class);
+        HashMap<String, DrugOrderSchedule> byOrder = new HashMap<>();
+        byOrder.put("order-1", drugOrderSchedule);
+
+        Schedule visitSchedule = new Schedule();
+        visitSchedule.setIsUpdateCompleteSchedule(true);
+
+        when(visitService.getVisitByUuid("current-uuid")).thenReturn(currentVisit);
+        when(visitService.getVisitsByPatient(patient)).thenReturn(Arrays.asList(inAbsentiaVisit, currentVisit));
+        when(drugOrderService.getPrescribedDrugOrders(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(drugOrderService.getDiscontinuedDrugOrders(any())).thenReturn(Collections.emptyMap());
+        when(bahmniObsService.observationsFor(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(ipdScheduleService.getMedicationSlots(anyString(), any(ServiceType.class), anyList())).thenReturn(Collections.emptyList());
+        when(slotTimeCreationService.getDrugOrderScheduledTime(any())).thenReturn(byOrder);
+        when(scheduleService.getScheduleByVisit(currentVisit)).thenReturn(visitSchedule);
+
+        service.getPrescribedOrders("current-uuid", true, null, null, null, true);
+
+        verify(drugOrderSchedule, times(1)).setIsUpdateCompleteSchedule(true);
+    }
+
+    @Test
+    public void shouldSetUpdateCompleteScheduleAsFalse_WhenVisitScheduleIsMissing() {
+        Visit currentVisit = visit("current-uuid", "IPD", now(), null);
+        Visit inAbsentiaVisit = visit("in-absentia-uuid", "In Absentia", now() - HOUR, null);
+
+        DrugOrderSchedule drugOrderSchedule = org.mockito.Mockito.mock(DrugOrderSchedule.class);
+        HashMap<String, DrugOrderSchedule> byOrder = new HashMap<>();
+        byOrder.put("order-1", drugOrderSchedule);
+
+        when(visitService.getVisitByUuid("current-uuid")).thenReturn(currentVisit);
+        when(visitService.getVisitsByPatient(patient)).thenReturn(Arrays.asList(inAbsentiaVisit, currentVisit));
+        when(drugOrderService.getPrescribedDrugOrders(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(drugOrderService.getDiscontinuedDrugOrders(any())).thenReturn(Collections.emptyMap());
+        when(bahmniObsService.observationsFor(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(ipdScheduleService.getMedicationSlots(anyString(), any(ServiceType.class), anyList())).thenReturn(Collections.emptyList());
+        when(slotTimeCreationService.getDrugOrderScheduledTime(any())).thenReturn(byOrder);
+        when(scheduleService.getScheduleByVisit(currentVisit)).thenReturn(null);
+
+        service.getPrescribedOrders("current-uuid", true, null, null, null, true);
+
+        verify(drugOrderSchedule, times(1)).setIsUpdateCompleteSchedule(false);
     }
 
     private Visit visit(String uuid, String visitTypeName, long startTime, Long stopTime) {

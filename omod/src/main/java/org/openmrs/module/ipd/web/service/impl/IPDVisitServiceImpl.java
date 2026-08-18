@@ -18,6 +18,7 @@ import org.openmrs.module.ipd.api.model.ServiceType;
 import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.api.model.*;
 import org.openmrs.module.ipd.api.service.ReferenceService;
+import org.openmrs.module.ipd.api.service.ScheduleService;
 import org.openmrs.module.ipd.api.service.SlotService;
 import org.openmrs.module.ipd.api.util.IPDConstants;
 import org.openmrs.module.ipd.web.service.IPDVisitService;
@@ -44,6 +45,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
     private ReferenceService referenceService;
     private VisitService visitService;
     private SlotService slotService;
+    private ScheduleService scheduleService;
 
     @Autowired
     public IPDVisitServiceImpl(BahmniDrugOrderService drugOrderService,
@@ -53,7 +55,8 @@ public class IPDVisitServiceImpl implements IPDVisitService {
                                ConceptService conceptService,
                                ReferenceService referenceService,
                                VisitService visitService,
-                               SlotService slotService) {
+                               SlotService slotService,
+                               ScheduleService scheduleService) {
         this.drugOrderService = drugOrderService;
         this.ipdScheduleService = ipdScheduleService;
         this.slotTimeCreationService = slotTimeCreationService;
@@ -63,6 +66,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         this.referenceService = referenceService;
         this.visitService = visitService;
         this.slotService = slotService;
+        this.scheduleService = scheduleService;
     }
 
 
@@ -101,7 +105,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
             Collection<BahmniObservation> orderAttributeObs = bahmniObsService.observationsFor(patientUuid, getOrdAttributeConcepts(), null, null, false, null, null, null);
             List<BahmniDrugOrder> bahmniDrugOrders = bahmniDrugOrderMapper.mapToResponse(drugOrdersFiltered, orderAttributeObs, drugOrderMap , null);
             bahmniDrugOrders=sortDrugOrdersAccordingToTheirSortWeight(bahmniDrugOrders);
-            Map<String, DrugOrderSchedule> drugOrderScheduleByOrders = getDrugOrderScheduleForOrders(patientUuid, bahmniDrugOrders);
+            Map<String, DrugOrderSchedule> drugOrderScheduleByOrders = getDrugOrderScheduleForOrders(patientUuid, bahmniDrugOrders, currentVisit);
 
             return bahmniDrugOrders.stream().map(bahmniDrugOrder -> IPDDrugOrder.createFrom(bahmniDrugOrder,drugOrderScheduleByOrders.get(bahmniDrugOrder.getUuid()))).collect(Collectors.toList());
 
@@ -110,7 +114,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         }
     }
 
-    private Map<String, DrugOrderSchedule> getDrugOrderScheduleForOrders(String patientUuid, List<BahmniDrugOrder> bahmniDrugOrders) {
+    private Map<String, DrugOrderSchedule> getDrugOrderScheduleForOrders(String patientUuid, List<BahmniDrugOrder> bahmniDrugOrders, Visit currentVisit) {
         List<String> orderUuids = bahmniDrugOrders.stream()
                 .map(BahmniDrugOrder::getUuid)
                 .collect(Collectors.toList());
@@ -130,6 +134,13 @@ public class IPDVisitServiceImpl implements IPDVisitService {
                 .collect(Collectors.groupingBy(slot -> (DrugOrder) slot.getOrder()));
 
         Map<String, DrugOrderSchedule> drugOrderScheduleByOrders = slotTimeCreationService.getDrugOrderScheduledTime(groupedByOrders);
+
+        Schedule visitSchedule = scheduleService.getScheduleByVisit(currentVisit);
+        Boolean isUpdateCompleteSchedule = visitSchedule != null
+                && Boolean.TRUE.equals(visitSchedule.getIsUpdateCompleteSchedule());
+        drugOrderScheduleByOrders.values().forEach(
+                drugOrderSchedule -> drugOrderSchedule.setIsUpdateCompleteSchedule(isUpdateCompleteSchedule)
+        );
 
 
         return drugOrderScheduleByOrders;
