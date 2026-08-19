@@ -14,8 +14,6 @@ import org.openmrs.module.bahmniemrapi.drugorder.mapper.BahmniDrugOrderMapper;
 import org.openmrs.module.bahmniemrapi.encountertransaction.contract.BahmniObservation;
 import org.openmrs.module.ipd.web.model.DrugOrderSchedule;
 import org.openmrs.module.ipd.web.model.IPDDrugOrder;
-import org.openmrs.module.ipd.api.model.ServiceType;
-import org.openmrs.module.ipd.api.model.Slot;
 import org.openmrs.module.ipd.api.model.*;
 import org.openmrs.module.ipd.api.service.ReferenceService;
 import org.openmrs.module.ipd.api.service.SlotService;
@@ -72,9 +70,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
         visitUuidsList.add(visitUuid);
         Visit visit = visitService.getVisitByUuid(visitUuid);
         if (visit == null) return Collections.emptyList();
-        // Fetch drug orders from all preceding visits (IPD, OPD, In Absentia, Lab, etc.)
-        // so that any still-active medication remains visible in this visit.
-        // Inactive orders are filtered out in getIPDDrugOrders via the effectiveStopDate check.
+       // Fetch active drug orders from all preceding visits so they remain visible in the current visit.
         visitUuidsList.addAll(getPrecedingVisitUuids(visit.getPatient(), visitUuid));
 
         List<DrugOrder> prescribedDrugOrders = drugOrderService.getPrescribedDrugOrders(
@@ -192,11 +188,7 @@ public class IPDVisitServiceImpl implements IPDVisitService {
                 .orElse(-1);
 
         if (currentVisitIndex == -1) return result;
-
-        // Include every preceding visit regardless of type (IPD, OPD, In Absentia, Lab, etc.)
-        // so that any still-active medication stays visible in this and future visits.
-        // Ended/stopped orders are already filtered out downstream in getIPDDrugOrders()
-        // via the effectiveStopDate check.
+    
         for (int i = currentVisitIndex + 1; i < sortedVisits.size(); i++) {
             result.add(sortedVisits.get(i).getUuid());
         }
