@@ -434,8 +434,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
 
     private double getFrequencyPerDayByName(String frequencyName) {
         if (frequencyName == null) return 1.0;
-        return org.openmrs.api.context.Context.getOrderService().getOrderFrequencies(false)
-            .stream()
+        java.util.List<org.openmrs.OrderFrequency> frequencies = org.openmrs.api.context.Context.getOrderService().getOrderFrequencies(false);
+        if (frequencies == null) return 1.0;
+        return frequencies.stream()
             .filter(f -> frequencyName.equals(f.getConcept().getName().getName()))
             .findFirst()
             .map(f -> f.getFrequencyPerDay())
@@ -446,7 +447,9 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         switch (durationUnit != null ? durationUnit : "d") {
             case "wk": return duration * 7;
             case "mo": return duration * 30;
-            default:   return duration;
+            default:
+                log.warn("Unknown FHIR duration unit: " + durationUnit + "; treating as days");
+                return duration;
         }
     }
 
