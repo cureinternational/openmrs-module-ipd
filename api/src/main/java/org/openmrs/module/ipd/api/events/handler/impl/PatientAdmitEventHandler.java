@@ -4,6 +4,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.fhirExtension.model.Task;
 import org.openmrs.module.fhirExtension.service.TaskService;
+import org.openmrs.module.fhirExtension.web.contract.TaskInputDTO;
 import org.openmrs.module.fhirExtension.web.contract.TaskRequest;
 import org.openmrs.module.fhirExtension.web.mapper.TaskMapper;
 import org.openmrs.module.ipd.api.events.ConfigLoader;
@@ -16,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 public class PatientAdmitEventHandler  implements IPDEventHandler {
@@ -38,15 +40,23 @@ public class PatientAdmitEventHandler  implements IPDEventHandler {
                 .filter(config -> config.getEvent().equals(event.getIpdEventType().name()))
                 .findFirst()
                 .orElse(null);
+
         if (eventConfig != null) {
             for(TaskDetail taskDetail : eventConfig.getTasks()) {
-                TaskRequest taskRequest = IPDEventUtils.createNonMedicationTaskRequest(event, taskDetail.getName(), taskDetail.getType(), true);
+                List<TaskInputDTO> taskInputs = taskDetail.getInput().stream()
+                        .map(input -> {
+                            TaskInputDTO dto = new TaskInputDTO();
+                            dto.setType(input.getType());
+                            dto.setValueText(input.getValueText());
+                            return dto;
+                        })
+                        .collect(Collectors.toList());
+
+                TaskRequest taskRequest = IPDEventUtils.createNonMedicationTaskRequest(event, taskDetail.getName(), taskDetail.getType(), taskInputs, true);
                 Task task = taskMapper.fromRequest(taskRequest);
                 taskService.saveTask(task);
                 log.info("Task created " + taskDetail.getName());
             }
         }
-
-
     }
 }
