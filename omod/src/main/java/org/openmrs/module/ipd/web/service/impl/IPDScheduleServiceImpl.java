@@ -211,7 +211,8 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
 
     @Override
     public void handlePostProcessEncounterTransaction(Encounter encounter, EncounterTransaction encounterTransaction) {
-        if (Boolean.valueOf(Context.getAdministrationService().getGlobalProperty("bahmni-ipd.allowSlotStopOnDrugOrderStop","false"))) {
+        String gpValue = Context.getAdministrationService().getGlobalProperty("bahmni-ipd.allowSlotStopOnDrugOrderStop", "false");
+        if (Boolean.valueOf(gpValue)) {
             handleDrugOrderStop(encounterTransaction);
         }
     }
@@ -297,21 +298,32 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
 
     private void handleDrugOrderStop(EncounterTransaction encounterTransaction){
         List<EncounterTransaction.DrugOrder> stoppedDrugOrders = encounterTransaction.getDrugOrders().stream().filter(drugOrder -> drugOrder.getDateStopped() !=null).collect(Collectors.toList());
+
         String patientUuid = encounterTransaction.getPatientUuid();
         for (EncounterTransaction.DrugOrder drugOrder : stoppedDrugOrders) {
             List<Slot> existingSlots = getMedicationSlots(patientUuid,ServiceType.MEDICATION_REQUEST,new ArrayList<>(Arrays.asList(new String[]{drugOrder.getPreviousOrderUuid()})));
             if (existingSlots == null || existingSlots.isEmpty()) {
                 continue;
             }
+
             boolean atleastOneMedicationAdministered = existingSlots.stream().anyMatch(slot -> slot.getMedicationAdministration() != null);
+
             if (atleastOneMedicationAdministered){ // Mark status of non administered slots to stopped
-                existingSlots.stream().forEach(slot -> {
-                    if ((slot.getMedicationAdministration() == null) && !slot.isStopped() && (DateTimeUtil.convertDateToLocalDateTime(drugOrder.getDateStopped())
-                            .compareTo(slot.getStartDateTime())) < 0)  {slot.setStatus(Slot.SlotStatus.STOPPED); slotService.saveSlot(slot);}});
-            } else { // Void all slots
-                existingSlots.stream().forEach(slot -> slotService.voidSlot(slot, ""));
+                for (Slot slot : existingSlots) {
+                    boolean hasAdministered = slot.getMedicationAdministration() != null;
+                    boolean isStopped = slot.isStopped();
+                    boolean timeComparison = DateTimeUtil.convertDateToLocalDateTime(drugOrder.getDateStopped()).compareTo(slot.getStartDateTime()) < 0;
+                    if (!hasAdministered && !isStopped && timeComparison) {
+                        slot.setStatus(Slot.SlotStatus.STOPPED);
+                        slotService.saveSlot(slot);
+                    }
+                }
+            } else { // Mark all slots as STOPPED (none administered yet)
+                for (Slot slot : existingSlots) {
+                    slot.setStatus(Slot.SlotStatus.STOPPED);
+                    slotService.saveSlot(slot);
+                }
             }
         }
-
     }
 }
