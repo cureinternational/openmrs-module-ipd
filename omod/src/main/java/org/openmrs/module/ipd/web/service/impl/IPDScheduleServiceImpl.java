@@ -297,8 +297,7 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
     }
 
     private void handleDrugOrderStop(EncounterTransaction encounterTransaction){
-        List<EncounterTransaction.DrugOrder> allDrugOrders = encounterTransaction.getDrugOrders();
-        List<EncounterTransaction.DrugOrder> stoppedDrugOrders = allDrugOrders.stream().filter(drugOrder -> drugOrder.getDateStopped() !=null).collect(Collectors.toList());
+        List<EncounterTransaction.DrugOrder> stoppedDrugOrders = encounterTransaction.getDrugOrders().stream().filter(drugOrder -> drugOrder.getDateStopped() !=null).collect(Collectors.toList());
 
         String patientUuid = encounterTransaction.getPatientUuid();
         for (EncounterTransaction.DrugOrder drugOrder : stoppedDrugOrders) {
@@ -311,10 +310,10 @@ public class IPDScheduleServiceImpl implements IPDScheduleService {
 
             if (atleastOneMedicationAdministered){ // Mark status of non administered slots to stopped
                 for (Slot slot : existingSlots) {
-                    boolean hasAdmin = slot.getMedicationAdministration() != null;
+                    boolean hasAdministered = slot.getMedicationAdministration() != null;
                     boolean isStopped = slot.isStopped();
                     boolean timeComparison = DateTimeUtil.convertDateToLocalDateTime(drugOrder.getDateStopped()).compareTo(slot.getStartDateTime()) < 0;
-                    if (!hasAdmin && !isStopped && timeComparison) {
+                    if (!hasAdministered && !isStopped && timeComparison) {
                         slot.setStatus(Slot.SlotStatus.STOPPED);
                         slotService.saveSlot(slot);
                     }
