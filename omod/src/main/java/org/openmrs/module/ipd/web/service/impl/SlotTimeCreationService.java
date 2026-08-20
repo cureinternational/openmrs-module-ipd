@@ -302,9 +302,13 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
     }
 
     private List<LocalDateTime> getSlotsStartTimeWithStartTimeDurationFrequency(ScheduleMedicationRequest request, DrugOrder order) {
-        int numberOfSlotsStartTimeToBeCreated = resolveSlotCountForStartTimeDuration(order);
+        int numberOfSlotsStartTimeToBeCreated = resolveSlotCountForStartTimeDuration(order, request.getVariableDosageSequence());
         List<LocalDateTime> slotsStartTime = new ArrayList<>();
-        Double slotDurationInHours =  order.getFrequency() != null ? 24 / order.getFrequency().getFrequencyPerDay() : 0;
+        Double slotDurationInHours = order.getFrequency() != null
+            ? 24 / order.getFrequency().getFrequencyPerDay()
+            : (request.getVariableDosageSequence() != null
+                ? 24.0 / getFrequencyPerDayFromFhir(order, request.getVariableDosageSequence())
+                : 0);
         LocalDateTime slotStartTime = request.getSlotStartTimeAsLocaltime();
         while (numberOfSlotsStartTimeToBeCreated-- > 0) {
             slotsStartTime.add(slotStartTime);
@@ -320,10 +324,14 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
         return slotsStartTime;
     }
 
-    private int resolveSlotCountForStartTimeDuration(DrugOrder order) {
+    private int resolveSlotCountForStartTimeDuration(DrugOrder order, Integer variableDosageSequence) {
         Integer intradaySlotCount = resolveIntradaySlotCount(order);
         if (intradaySlotCount != null && intradaySlotCount > 0) {
             return intradaySlotCount;
+        }
+
+        if (order.getFrequency() == null && variableDosageSequence != null && order.getDosingInstructions() != null) {
+            return computeVdpNumberOfSlots(order, variableDosageSequence);
         }
 
         if (order.getQuantity() == 0.0 || order.getFrequency() == null || order.getDuration() == null || order.getDose() == null) {
@@ -387,6 +395,62 @@ public class SlotTimeCreationService extends BaseOpenmrsService {
             drugOrderScheduleHash.put(drugOrder.getUuid(),drugOrderSchedule);
         }
         return drugOrderScheduleHash;
+    }
+
+    private int computeVdpNumberOfSlots(DrugOrder order, Integer sequence) {
+        try {
+            JsonNode dosages = objectMapper.readTree(order.getDosingInstructions());
+            for (JsonNode dosage : dosages) {
+                if (dosage.path("sequence").asInt() != sequence) continue;
+                if (dosage.path("timing").path("repeat").path("count").asInt(0) == 1) {
+                    return 1;
+                }
+                double duration = dosage.path("timing").path("repeat").path("duration").asDouble(0);
+                String durationUnit = dosage.path("timing").path("repeat").path("durationUnit").asText("d");
+                double durationDays = normalizeFhirDurationToDays(duration, durationUnit);
+                String frequencyName = dosage.path("timing").path("code").path("text").asText(null);
+                double frequencyPerDay = getFrequencyPerDayByName(frequencyName);
+                return (int) Math.ceil(durationDays * frequencyPerDay);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to compute VDP numberOfSlots from FHIR for order " + order.getUuid() + " sequence " + sequence, e);
+        }
+        return 1;
+    }
+
+    private double getFrequencyPerDayFromFhir(DrugOrder order, Integer sequence) {
+        try {
+            JsonNode dosages = objectMapper.readTree(order.getDosingInstructions());
+            for (JsonNode dosage : dosages) {
+                if (dosage.path("sequence").asInt() != sequence) continue;
+                String frequencyName = dosage.path("timing").path("code").path("text").asText(null);
+                return getFrequencyPerDayByName(frequencyName);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get frequencyPerDay from FHIR for order " + order.getUuid() + " sequence " + sequence, e);
+        }
+        return 1.0;
+    }
+
+    private double getFrequencyPerDayByName(String frequencyName) {
+        if (frequencyName == null) return 1.0;
+        java.util.List<org.openmrs.OrderFrequency> frequencies = org.openmrs.api.context.Context.getOrderService().getOrderFrequencies(false);
+        if (frequencies == null) return 1.0;
+        return frequencies.stream()
+            .filter(f -> frequencyName.equals(f.getConcept().getName().getName()))
+            .findFirst()
+            .map(f -> f.getFrequencyPerDay())
+            .orElse(1.0);
+    }
+
+    private double normalizeFhirDurationToDays(double duration, String durationUnit) {
+        switch (durationUnit != null ? durationUnit : "d") {
+            case "wk": return duration * 7;
+            case "mo": return duration * 30;
+            default:
+                log.warn("Unknown FHIR duration unit: " + durationUnit + "; treating as days");
+                return duration;
+        }
     }
 
     private List<Long> deduplicateEpochs(List<Long> epochs) {

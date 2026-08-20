@@ -11,6 +11,7 @@ import org.openmrs.module.ipd.web.contract.CrossingSlotDTO;
 import org.openmrs.module.ipd.web.contract.ScheduleMedicationRequest;
 import org.openmrs.module.ipd.web.model.SlotTimeCreationResult;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import java.util.List;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RunWith(MockitoJUnitRunner.class)
@@ -38,7 +40,6 @@ public class SlotTimeCreationServiceTest {
                 .build();
     }
 
-    // Helper to create DrugOrder with dosingInstructions for triggering bucketSlots path
     private DrugOrder createDrugOrderWithFixedSchedule(int sequence) throws Exception {
         DrugOrder order = org.mockito.Mockito.mock(DrugOrder.class, org.mockito.Mockito.withSettings().lenient());
         String dosingInstructions = String.format(
@@ -50,7 +51,6 @@ public class SlotTimeCreationServiceTest {
         return order;
     }
 
-    // Helper to create Slot with DrugOrder that triggers bucketSlots logic
     private Slot makeSlotWithBucketingOrder(int sequence, LocalDateTime startDateTime, DrugOrder order) {
         Slot slot = org.mockito.Mockito.mock(Slot.class, org.mockito.Mockito.withSettings().lenient());
         Schedule schedule = org.mockito.Mockito.mock(Schedule.class, org.mockito.Mockito.withSettings().lenient());
@@ -95,10 +95,6 @@ public class SlotTimeCreationServiceTest {
         return crossingSlots;
     }
 
-
-    // -----------------------------------------------------------------------
-    // Core API Tests - createSlotsStartTimeFrom with SlotTimeCreationResult
-    // -----------------------------------------------------------------------
 
     @Test
     public void shouldUseQuantityDivDose_ForRegularOrders_FixedSchedule() {
@@ -187,10 +183,6 @@ public class SlotTimeCreationServiceTest {
         assertEquals(4, result.getSlotsStartTime().size());
     }
 
-    // -----------------------------------------------------------------------
-    // Crossing Slots Tests - midnight boundary handling
-    // -----------------------------------------------------------------------
-
     @Test
     public void shouldHandleFirstDayCrossingSlots_NonRecurring() {
         DrugOrder order = buildDrugOrder(4.0, 1.0);
@@ -274,10 +266,6 @@ public class SlotTimeCreationServiceTest {
         assertEquals("All slots should be marked as crossing", 3, result.getCrossingTagsByStartTime().size());
     }
 
-    // -----------------------------------------------------------------------
-    // Edge Cases and Null Safety Tests
-    // -----------------------------------------------------------------------
-
     @Test
     public void shouldHandleNullScheduleInReadPersistedCrossings() {
         List<Slot> slots = new ArrayList<>();
@@ -285,7 +273,6 @@ public class SlotTimeCreationServiceTest {
         slot.setSchedule(null);
         slots.add(slot);
 
-        // This should not throw NPE - tested via buildStageSchedules which calls readPersistedCrossingSlots internally
         List<org.openmrs.module.ipd.web.model.StageScheduleStatus> stages = slotTimeCreationService.buildStageSchedules(slots);
 
         assertNotNull("Should return empty list, not null", stages);
@@ -332,13 +319,8 @@ public class SlotTimeCreationServiceTest {
         assertEquals("Should infer from request when dose is null", 3, result.getSlotsStartTime().size());
     }
 
-    // -----------------------------------------------------------------------
-    // Bucketing Tests - routes slots via bucketSlots logic for FIXED_SCHEDULE
-    // -----------------------------------------------------------------------
-
     @Test
     public void shouldBucketSingleDay_AsDayWise() throws Exception {
-        // Single day with 2 slots - produces dayWise only
         DrugOrder order = createDrugOrderWithFixedSchedule(1);
         Slot s1 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 8, 0), order);
         Slot s2 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 20, 0), order);
@@ -356,7 +338,6 @@ public class SlotTimeCreationServiceTest {
 
     @Test
     public void shouldBucketNonUniformDays_AsFirstDayAndRemaining() throws Exception {
-        // Day 1: 2 slots, Day 2: 3 slots - produces firstDay + remaining
         DrugOrder order = createDrugOrderWithFixedSchedule(1);
         Slot s1 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 14, 0), order);
         Slot s2 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 20, 0), order);
@@ -378,8 +359,6 @@ public class SlotTimeCreationServiceTest {
 
     @Test
     public void shouldBucketMultipleDays_WithDayWiseMiddlePattern() throws Exception {
-        // Day 1: 2 slots, Day 2: 3 slots, Day 3: 2 slots
-        // Produces: firstDay (day 1) + dayWise (day 2) + remaining (day 3)
         DrugOrder order = createDrugOrderWithFixedSchedule(1);
         Slot s1 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 14, 0), order);
         Slot s2 = makeSlotWithBucketingOrder(1, LocalDateTime.of(2026, 8, 1, 20, 0), order);
@@ -400,5 +379,131 @@ public class SlotTimeCreationServiceTest {
         assertEquals("DayWise should have 3 slots from day 2", 3, result.get(0).getDayWiseSlotsStartTime().size());
         assertNotNull("Multi-day pattern should have remaining slots", result.get(0).getRemainingDaySlotsStartTime());
         assertEquals("Remaining should have 2 slots from day 3", 2, result.get(0).getRemainingDaySlotsStartTime().size());
+    }
+
+    private double invokeGetFrequencyPerDayFromFhir(DrugOrder order, int sequence) throws Exception {
+        Method method = SlotTimeCreationService.class.getDeclaredMethod("getFrequencyPerDayFromFhir", DrugOrder.class, Integer.class);
+        method.setAccessible(true);
+        return (double) method.invoke(slotTimeCreationService, order, sequence);
+    }
+
+    private double invokeNormalizeFhirDurationToDays(double duration, String durationUnit) throws Exception {
+        Method method = SlotTimeCreationService.class.getDeclaredMethod("normalizeFhirDurationToDays", double.class, String.class);
+        method.setAccessible(true);
+        return (double) method.invoke(slotTimeCreationService, duration, durationUnit);
+    }
+
+    private int invokeComputeVdpNumberOfSlots(DrugOrder order, int sequence) throws Exception {
+        Method method = SlotTimeCreationService.class.getDeclaredMethod("computeVdpNumberOfSlots", DrugOrder.class, Integer.class);
+        method.setAccessible(true);
+        return (int) method.invoke(slotTimeCreationService, order, sequence);
+    }
+
+    private DrugOrder createVdpDrugOrder(int sequence, String frequencyName, double durationDays, String durationUnit) {
+        DrugOrder order = org.mockito.Mockito.mock(DrugOrder.class, org.mockito.Mockito.withSettings().lenient());
+        String dosingInstructions = String.format(
+                "[{\"sequence\":%d,\"timing\":{\"repeat\":{\"duration\":%.1f,\"durationUnit\":\"%s\"},\"code\":{\"text\":\"%s\"}}}]",
+                sequence, durationDays, durationUnit, frequencyName
+        );
+        when(order.getDosingInstructions()).thenReturn(dosingInstructions);
+        when(order.getUuid()).thenReturn("vdp-uuid-" + sequence);
+        when(order.getFrequency()).thenReturn(null);
+        return order;
+    }
+
+    @Test
+    public void shouldNormalizeDaysDuration() throws Exception {
+        assertEquals(1.0, invokeNormalizeFhirDurationToDays(1.0, "d"), 0.001);
+    }
+
+    @Test
+    public void shouldNormalizeWeeksDuration() throws Exception {
+        assertEquals(7.0, invokeNormalizeFhirDurationToDays(1.0, "wk"), 0.001);
+    }
+
+    @Test
+    public void shouldNormalizeMonthsDuration() throws Exception {
+        assertEquals(30.0, invokeNormalizeFhirDurationToDays(1.0, "mo"), 0.001);
+    }
+
+    @Test
+    public void shouldNormalizeNullDurationUnitAsDays() throws Exception {
+        assertEquals(2.0, invokeNormalizeFhirDurationToDays(2.0, null), 0.001);
+    }
+
+    @Test
+    public void shouldComputeCorrectSlotCountForVdpOrder() throws Exception {
+        DrugOrder order = createVdpDrugOrder(1, "Every 2 hours", 1.0, "d");
+        int slots = invokeComputeVdpNumberOfSlots(order, 1);
+        assertTrue("Should compute at least 1 slot", slots >= 1);
+    }
+
+    @Test
+    public void shouldReturnOneSlotForVdpWithSingleCount() throws Exception {
+        DrugOrder order = org.mockito.Mockito.mock(DrugOrder.class, org.mockito.Mockito.withSettings().lenient());
+        String dosingInstructions = "[{\"sequence\":1,\"timing\":{\"repeat\":{\"count\":1},\"code\":{\"text\":\"STAT (Immediately)\"}}}]";
+        when(order.getDosingInstructions()).thenReturn(dosingInstructions);
+        when(order.getUuid()).thenReturn("vdp-single-uuid");
+        when(order.getFrequency()).thenReturn(null);
+        int slots = invokeComputeVdpNumberOfSlots(order, 1);
+        assertEquals("count=1 should return exactly 1 slot", 1, slots);
+    }
+
+    @Test
+    public void shouldReturnOneSlotWhenVdpSequenceNotFound() throws Exception {
+        DrugOrder order = createVdpDrugOrder(1, "Every 2 hours", 1.0, "d");
+        int slots = invokeComputeVdpNumberOfSlots(order, 99);
+        assertEquals("Non-matching sequence should fallback to 1", 1, slots);
+    }
+
+    @Test
+    public void shouldReturnOneSlotWhenDosingInstructionsInvalid() throws Exception {
+        DrugOrder order = org.mockito.Mockito.mock(DrugOrder.class, org.mockito.Mockito.withSettings().lenient());
+        when(order.getDosingInstructions()).thenReturn("invalid-json");
+        when(order.getUuid()).thenReturn("vdp-invalid-uuid");
+        when(order.getFrequency()).thenReturn(null);
+        int slots = invokeComputeVdpNumberOfSlots(order, 1);
+        assertEquals("Invalid JSON should fallback to 1", 1, slots);
+    }
+
+    @Test
+    public void shouldCreateSlotsForVdpStartTimeDurationRequest() {
+        DrugOrder order = createVdpDrugOrder(1, "Every 2 hours", 1.0, "d");
+        LocalDateTime startTime = LocalDateTime.of(2026, 8, 20, 8, 0);
+        long startEpoch = startTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.START_TIME_DURATION_FREQUENCY)
+                .slotStartTime(startEpoch)
+                .variableDosageSequence(1)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertNotNull(result);
+        assertTrue("Should create at least 1 slot", result.getSlotsStartTime().size() >= 1);
+    }
+
+    @Test
+    public void shouldCreateSingleSlotForVdpWithCountOne() {
+        DrugOrder order = org.mockito.Mockito.mock(DrugOrder.class, org.mockito.Mockito.withSettings().lenient());
+        String dosingInstructions = "[{\"sequence\":1,\"timing\":{\"repeat\":{\"count\":1},\"code\":{\"text\":\"STAT\"}}}]";
+        when(order.getDosingInstructions()).thenReturn(dosingInstructions);
+        when(order.getUuid()).thenReturn("vdp-stat-uuid");
+        when(order.getFrequency()).thenReturn(null);
+
+        LocalDateTime startTime = LocalDateTime.of(2026, 8, 20, 8, 0);
+        long startEpoch = startTime.toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+        ScheduleMedicationRequest request = ScheduleMedicationRequest.builder()
+                .medicationFrequency(ScheduleMedicationRequest.MedicationFrequency.START_TIME_DURATION_FREQUENCY)
+                .slotStartTime(startEpoch)
+                .variableDosageSequence(1)
+                .build();
+
+        SlotTimeCreationResult result = slotTimeCreationService.createSlotsStartTimeFrom(request, order);
+
+        assertNotNull(result);
+        assertEquals("count=1 should create exactly 1 slot", 1, result.getSlotsStartTime().size());
     }
 }
