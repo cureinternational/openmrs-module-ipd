@@ -10,6 +10,7 @@ import org.openmrs.Provider;
 import org.openmrs.User;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.ipd.api.dao.CareTeamDAO;
+import org.openmrs.module.ipd.api.model.CareTeam;
 import org.openmrs.module.ipd.api.model.CareTeamParticipant;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
@@ -17,7 +18,9 @@ import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -43,88 +46,115 @@ public class CareTeamServiceImplTest {
         MockitoAnnotations.initMocks(this);
         PowerMockito.mockStatic(Context.class);
         User mockUser = mock(User.class);
-        mockUser.setId(1);
+        // FIX: Use when() instead of setId() which is a no-op on mocks
+        when(mockUser.getId()).thenReturn(1);
         when(Context.getAuthenticatedUser()).thenReturn(mockUser);
     }
 
     @Test
     public void shouldUnbookmarkAllActivePatients() {
-        CareTeamParticipant participant1 = createMockParticipant(1, false);
-        CareTeamParticipant participant2 = createMockParticipant(2, false);
-        CareTeamParticipant participant3 = createMockParticipant(3, false);
+        // FIX: Use getAllCareTeams() which is what the actual implementation calls
+        CareTeam careTeam1 = createMockCareTeam(1);
+        Set<CareTeamParticipant> participants = new HashSet<>();
+        participants.add(createMockParticipant(1, false));
+        participants.add(createMockParticipant(2, false));
+        participants.add(createMockParticipant(3, false));
+        careTeam1.setParticipants(participants);
 
-        List<CareTeamParticipant> activeParticipants = new ArrayList<>();
-        activeParticipants.add(participant1);
-        activeParticipants.add(participant2);
-        activeParticipants.add(participant3);
+        List<CareTeam> allTeams = new ArrayList<>();
+        allTeams.add(careTeam1);
 
-        when(careTeamDAO.getActiveParticipants(any(Date.class))).thenReturn(activeParticipants);
-        when(careTeamDAO.saveParticipant(any(CareTeamParticipant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(careTeamDAO.getAllCareTeams()).thenReturn(allTeams);
+        when(careTeamDAO.saveCareTeam(any(CareTeam.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         int count = careTeamService.unbookmarkAllActivePatients();
 
-        assertEquals(3, count);
-        verify(careTeamDAO, times(1)).getActiveParticipants(any(Date.class));
-        verify(careTeamDAO, times(3)).saveParticipant(any(CareTeamParticipant.class));
+        assertEquals("Should unbookmark all 3 participants", 3, count);
+        verify(careTeamDAO, times(1)).getAllCareTeams();
+        // FIX: voidCareTeamParticipant is called 3 times, each saves the careTeam
+        verify(careTeamDAO, times(3)).saveCareTeam(any(CareTeam.class));
 
-        for (CareTeamParticipant participant : activeParticipants) {
-            assertTrue(participant.getVoided());
-            assertNotNull(participant.getDateVoided());
-            assertEquals("Automatically unbookmarked at shift end", participant.getVoidReason());
+        // FIX: Assert real post-conditions (voided + voidReason + auditBy)
+        for (CareTeamParticipant participant : careTeam1.getParticipants()) {
+            assertTrue("Participant " + participant.getId() + " should be voided", participant.getVoided());
+            assertNotNull("Participant " + participant.getId() + " voidedBy must be set", participant.getVoidedBy());
+            assertNotNull("Participant " + participant.getId() + " dateVoided must be set", participant.getDateVoided());
+            assertEquals("Participant " + participant.getId() + " voidReason must match",
+                "Automatically unbookmarked at shift end", participant.getVoidReason());
         }
     }
 
     @Test
-    public void shouldReturnZeroWhenNoActiveParticipants() {
-        List<CareTeamParticipant> emptyList = new ArrayList<>();
-        when(careTeamDAO.getActiveParticipants(any(Date.class))).thenReturn(emptyList);
+    public void shouldReturnZeroWhenNoCareTeams() {
+        // FIX: Test with empty getAllCareTeams() result
+        when(careTeamDAO.getAllCareTeams()).thenReturn(new ArrayList<>());
 
         int count = careTeamService.unbookmarkAllActivePatients();
 
-        assertEquals(0, count);
-        verify(careTeamDAO, times(1)).getActiveParticipants(any(Date.class));
-        verify(careTeamDAO, times(0)).saveParticipant(any(CareTeamParticipant.class));
+        assertEquals("Should return 0 when no care teams exist", 0, count);
+        verify(careTeamDAO, times(1)).getAllCareTeams();
+        verify(careTeamDAO, times(0)).saveCareTeam(any(CareTeam.class));
     }
 
     @Test
     public void shouldSetAuditFieldsCorrectly() {
+        CareTeam careTeam = createMockCareTeam(1);
         CareTeamParticipant participant = createMockParticipant(1, false);
-        List<CareTeamParticipant> activeParticipants = new ArrayList<>();
-        activeParticipants.add(participant);
+        careTeam.addParticipant(participant);
 
-        when(careTeamDAO.getActiveParticipants(any(Date.class))).thenReturn(activeParticipants);
-        when(careTeamDAO.saveParticipant(any(CareTeamParticipant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(careTeamDAO.getAllCareTeams()).thenReturn(new ArrayList<CareTeam>() {{ add(careTeam); }});
+        when(careTeamDAO.saveCareTeam(any(CareTeam.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         careTeamService.unbookmarkAllActivePatients();
 
-        assertTrue(participant.getVoided());
-        assertNotNull(participant.getVoidedBy());
-        assertNotNull(participant.getDateVoided());
-        assertEquals("Automatically unbookmarked at shift end", participant.getVoidReason());
+        // FIX: Assert ALL audit fields including voidedBy
+        assertTrue("Participant voided flag should be true", participant.getVoided());
+        assertNotNull("VoidedBy audit field must be set", participant.getVoidedBy());
+        assertNotNull("DateVoided audit field must be set", participant.getDateVoided());
+        assertEquals("VoidReason must match exact message",
+            "Automatically unbookmarked at shift end", participant.getVoidReason());
     }
 
     @Test
-    public void shouldVoidMultipleParticipantsFromDifferentProviders() {
-        CareTeamParticipant nurse1Patient1 = createMockParticipant(1, false);
-        CareTeamParticipant nurse1Patient2 = createMockParticipant(2, false);
-        CareTeamParticipant nurse2Patient3 = createMockParticipant(3, false);
-        CareTeamParticipant nurse2Patient4 = createMockParticipant(4, false);
+    public void shouldVoidMultipleParticipantsAcrossMultipleCareTeams() {
+        // FIX: Test with multiple care teams (not just one long list)
+        CareTeam careTeam1 = createMockCareTeam(1);
+        Set<CareTeamParticipant> team1Participants = new HashSet<>();
+        team1Participants.add(createMockParticipant(1, false));
+        team1Participants.add(createMockParticipant(2, false));
+        careTeam1.setParticipants(team1Participants);
 
-        List<CareTeamParticipant> activeParticipants = new ArrayList<>();
-        activeParticipants.add(nurse1Patient1);
-        activeParticipants.add(nurse1Patient2);
-        activeParticipants.add(nurse2Patient3);
-        activeParticipants.add(nurse2Patient4);
+        CareTeam careTeam2 = createMockCareTeam(2);
+        Set<CareTeamParticipant> team2Participants = new HashSet<>();
+        team2Participants.add(createMockParticipant(3, false));
+        team2Participants.add(createMockParticipant(4, false));
+        careTeam2.setParticipants(team2Participants);
 
-        when(careTeamDAO.getActiveParticipants(any(Date.class))).thenReturn(activeParticipants);
-        when(careTeamDAO.saveParticipant(any(CareTeamParticipant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        List<CareTeam> allTeams = new ArrayList<>();
+        allTeams.add(careTeam1);
+        allTeams.add(careTeam2);
+
+        when(careTeamDAO.getAllCareTeams()).thenReturn(allTeams);
+        when(careTeamDAO.saveCareTeam(any(CareTeam.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         int count = careTeamService.unbookmarkAllActivePatients();
 
-        assertEquals(4, count);
-        for (CareTeamParticipant participant : activeParticipants) {
-            assertTrue("Participant " + participant.getId() + " should be voided", participant.getVoided());
+        assertEquals("Should unbookmark 4 participants from 2 care teams", 4, count);
+
+        // FIX: Assert voided state on all participants across all teams
+        for (CareTeam team : allTeams) {
+            for (CareTeamParticipant p : team.getParticipants()) {
+                assertTrue("Participant " + p.getId() + " should be voided", p.getVoided());
+                assertEquals("Participant " + p.getId() + " voidReason must match",
+                    "Automatically unbookmarked at shift end", p.getVoidReason());
+            }
         }
+    }
+
+    private CareTeam createMockCareTeam(Integer id) {
+        CareTeam careTeam = new CareTeam();
+        careTeam.setId(id);
+        return careTeam;
     }
 
     private CareTeamParticipant createMockParticipant(Integer id, boolean voided) {

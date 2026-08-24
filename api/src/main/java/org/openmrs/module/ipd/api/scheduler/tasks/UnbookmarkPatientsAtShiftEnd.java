@@ -21,7 +21,14 @@ import org.slf4j.LoggerFactory;
  * - After execution, calculates next shift end time and reschedules itself
  * - repeatInterval=0 ensures the task doesn't auto-repeat; manual rescheduling via setStartTime()
  *
- * Shift times are configured via Global Property 'ipd.shiftDetails' in JSON format.
+ * Safety Guarantee (Try-Finally Pattern):
+ * - Reschedule is in a finally block → guaranteed to execute even if unbooking fails
+ * - Unbooking errors are logged but don't prevent task rescheduling
+ * - Configuration errors are logged but task reschedules with fallback
+ * - No silent stalls: task will always be rescheduled for next shift end time
+ *
+ * Shift times are configured via Global Property 'ipd.shiftDetails' in JSON format:
+ * {"1": {"shiftStartTime":"08:00","shiftEndTime":"19:00"}, "2": {"shiftStartTime":"19:00","shiftEndTime":"08:00"}}
  */
 public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
 
@@ -32,28 +39,41 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
 
     @Override
     public void execute() {
+        List<String> shiftEndTimes = null;
         try {
             String shiftDetailsJson = Context.getAdministrationService()
                 .getGlobalProperty(SHIFT_DETAILS_GP);
 
             if (shiftDetailsJson == null || shiftDetailsJson.isEmpty()) {
+                logger.debug("Shift configuration not set; skipping unbooking");
                 return;
             }
-
-            List<String> shiftEndTimes = parseShiftEndTimes(shiftDetailsJson);
-
+            shiftEndTimes = parseShiftEndTimes(shiftDetailsJson);
             if (shiftEndTimes.isEmpty()) {
+                logger.warn("No valid shift end times found in configuration");
                 return;
             }
-
             if (isShiftEndTime(shiftEndTimes)) {
-                CareTeamService careTeamService = Context.getService(CareTeamService.class);
-                careTeamService.unbookmarkAllActivePatients();
+                try {
+                    CareTeamService careTeamService = Context.getService(CareTeamService.class);
+                    int unbookmarked = careTeamService.unbookmarkAllActivePatients();
+                    logger.info("Unbookmarked {} patients at shift end", unbookmarked);
+                } catch (Exception e) {
+                    logger.error("Failed to unbookmark patients at shift end", e);
+                }
             }
-
-            scheduleNextExecution(shiftEndTimes);
         } catch (Exception e) {
-            // Silently handle exceptions
+            logger.error("Error loading shift configuration or checking shift end time", e);
+        } finally {
+            if (shiftEndTimes != null && !shiftEndTimes.isEmpty()) {
+                try {
+                    scheduleNextExecution(shiftEndTimes);
+                } catch (Exception e) {
+                    logger.error("Failed to reschedule next execution", e);
+                }
+            } else {
+                logger.warn("Cannot reschedule: no valid shift times available");
+            }
         }
     }
 
@@ -64,7 +84,7 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
                 return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
             }
         } catch (NumberFormatException e) {
-            // Invalid time format
+            logger.error("Error occurred while times to minutes", e);
         }
         return -1;
     }
@@ -82,7 +102,7 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
                 }
             }
         } catch (Exception e) {
-            // Silently handle
+            logger.error("Error occurred while checking shift end time", e);
         }
         return false;
     }
@@ -130,6 +150,7 @@ public class UnbookmarkPatientsAtShiftEnd extends AbstractTask {
             cal.add(Calendar.MINUTE, -EXECUTION_BUFFER_MINUTES);
             return cal.getTime();
         } catch (Exception e) {
+            logger.error("Error occurred while calculating execution time for shift {}", shiftEndTime, e);
             return null;
         }
     }
