@@ -1,7 +1,7 @@
 package org.openmrs.module.ipd.api.events;
 
 import org.openmrs.module.fhir2.model.FhirTask;
-import org.openmrs.module.fhirExtension.web.contract.TaskInputDTO;
+import org.openmrs.module.fhirExtension.web.contract.TaskInputRequestDTO;
 import org.openmrs.module.fhirExtension.web.contract.TaskRequest;
 import org.openmrs.module.ipd.api.events.model.IPDEvent;
 
@@ -12,7 +12,7 @@ import java.util.List;
 public class IPDEventUtils {
 
     public static TaskRequest createNonMedicationTaskRequest(IPDEvent ipdEvent, String name, String taskType, Boolean isSystemGenerated) {
-        List<TaskInputDTO> emptyInput = new ArrayList<>();
+        List<TaskInputRequestDTO> emptyInput = new ArrayList<>();
         TaskRequest taskRequest = new TaskRequest();
         taskRequest.setName(name);
         taskRequest.setTaskType(taskType);
@@ -26,7 +26,7 @@ public class IPDEventUtils {
         return taskRequest;
     }
 
-    public static TaskRequest createNonMedicationTaskRequest(IPDEvent ipdEvent, String name, String taskType, List<TaskInputDTO> input, Boolean isSystemGenerated) {
+    public static TaskRequest createNonMedicationTaskRequest(IPDEvent ipdEvent, String name, String taskType, List<TaskInputRequestDTO> input, Boolean isSystemGenerated) {
         TaskRequest taskRequest = new TaskRequest();
         taskRequest.setName(name);
         taskRequest.setTaskType(taskType);

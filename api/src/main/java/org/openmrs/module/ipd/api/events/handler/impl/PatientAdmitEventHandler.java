@@ -4,7 +4,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.fhirExtension.model.Task;
 import org.openmrs.module.fhirExtension.service.TaskService;
-import org.openmrs.module.fhirExtension.web.contract.TaskInputDTO;
+import org.openmrs.module.fhirExtension.web.contract.TaskInputRequestDTO;
 import org.openmrs.module.fhirExtension.web.contract.TaskRequest;
 import org.openmrs.module.fhirExtension.web.mapper.TaskMapper;
 import org.openmrs.module.ipd.api.events.ConfigLoader;
@@ -43,9 +43,9 @@ public class PatientAdmitEventHandler  implements IPDEventHandler {
 
         if (eventConfig != null) {
             for(TaskDetail taskDetail : eventConfig.getTasks()) {
-                List<TaskInputDTO> taskInputs = taskDetail.getInput().stream()
+                List<TaskInputRequestDTO> taskInputs = taskDetail.getInput().stream()
                         .map(input -> {
-                            TaskInputDTO dto = new TaskInputDTO();
+                            TaskInputRequestDTO dto = new TaskInputRequestDTO();
                             dto.setType(input.getType());
                             dto.setValueText(input.getValueText());
                             return dto;
