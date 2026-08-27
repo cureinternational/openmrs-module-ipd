@@ -9,6 +9,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.openmrs.Provider;
+import org.openmrs.module.ipd.api.model.CareTeam;
 import org.openmrs.module.ipd.api.model.CareTeamParticipant;
 
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class HibernateCareTeamDAOTest {
@@ -42,6 +44,34 @@ public class HibernateCareTeamDAOTest {
     }
 
     @Test
+    public void shouldGetAllCareTeams() {
+        // FIX: Add missing test for getAllCareTeams()
+        org.openmrs.module.ipd.api.model.CareTeam careTeam1 = createCareTeam();
+        org.openmrs.module.ipd.api.model.CareTeam careTeam2 = createCareTeam();
+
+        List<org.openmrs.module.ipd.api.model.CareTeam> careTeams = new ArrayList<>();
+        careTeams.add(careTeam1);
+        careTeams.add(careTeam2);
+
+        when(mockQuery.list()).thenReturn(careTeams);
+
+        List<org.openmrs.module.ipd.api.model.CareTeam> result = hibernateCareTeamDAO.getAllCareTeams();
+
+        assertEquals("Should return 2 care teams", 2, result.size());
+        assertNotNull("First care team should not be null", result.get(0));
+        assertNotNull("Second care team should not be null", result.get(1));
+    }
+
+    @Test
+    public void shouldReturnEmptyListWhenNoCareTeams() {
+        when(mockQuery.list()).thenReturn(new ArrayList<>());
+
+        List<org.openmrs.module.ipd.api.model.CareTeam> result = hibernateCareTeamDAO.getAllCareTeams();
+
+        assertEquals("Should return empty list", 0, result.size());
+    }
+
+    @Test
     public void shouldGetActiveParticipantsBeforeShiftEnd() {
         CareTeamParticipant participant1 = createParticipant(1, false);
         CareTeamParticipant participant2 = createParticipant(2, false);
@@ -55,7 +85,7 @@ public class HibernateCareTeamDAOTest {
 
         List<CareTeamParticipant> result = hibernateCareTeamDAO.getActiveParticipants(new Date());
 
-        assertEquals(2, result.size());
+        assertEquals("Should return 2 active participants", 2, result.size());
     }
 
     @Test
@@ -67,17 +97,20 @@ public class HibernateCareTeamDAOTest {
 
         List<CareTeamParticipant> result = hibernateCareTeamDAO.getActiveParticipants(new Date());
 
-        assertEquals(0, result.size());
+        assertEquals("Should return empty list", 0, result.size());
     }
 
     @Test
     public void shouldSaveParticipantSuccessfully() {
+        // FIX: Don't just assert what we set - verify it was saved via saveOrUpdate
         CareTeamParticipant participant = createParticipant(1, false);
 
         CareTeamParticipant saved = hibernateCareTeamDAO.saveParticipant(participant);
 
-        assertNotNull(saved);
-        assertEquals(Integer.valueOf(1), saved.getId());
+        assertNotNull("Saved participant should not be null", saved);
+        assertEquals("Saved participant ID should match", Integer.valueOf(1), saved.getId());
+        // Verify sessionFactory.getCurrentSession().saveOrUpdate() was called
+        verify(mockSession).saveOrUpdate(participant);
     }
 
     @Test
@@ -93,6 +126,11 @@ public class HibernateCareTeamDAOTest {
         List<CareTeamParticipant> result = hibernateCareTeamDAO.getActiveParticipants(new Date());
 
         assertEquals(5, result.size());
+    }
+
+    private CareTeam createCareTeam() {
+        CareTeam careTeam = new CareTeam();
+        return careTeam;
     }
 
     private CareTeamParticipant createParticipant(Integer id, boolean voided) {
