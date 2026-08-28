@@ -47,7 +47,7 @@
 		<argLine>-Xmx1024m</argLine>
 		<jacocoVersion>0.7.9</jacocoVersion>
 		<lombokVersion>1.18.26</lombokVersion>
-		<openmrsFhir2Version>2.5.0</openmrsFhir2Version>
+		<openmrsFhir2Version>2.5.1</openmrsFhir2Version>
 		<fhir2ExtensionVersion>2.0.0-SNAPSHOT</fhir2ExtensionVersion>
 		<bahmniVersion>2.0.0-SNAPSHOT</bahmniVersion>
 		<emrapi-omod.version>2.3.0</emrapi-omod.version>

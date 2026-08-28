@@ -1,20 +1,29 @@
 package org.openmrs.module.ipd.web.contract;
 
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
+import org.openmrs.api.context.Context;
+import org.openmrs.module.fhirExtension.model.Task;
+import org.openmrs.module.fhirExtension.service.TaskService;
 import org.openmrs.module.ipd.api.model.MedicationAdministrationNote;
 import org.openmrs.module.ipd.api.model.MedicationAdministrationPerformer;
+import org.openmrs.module.ipd.web.util.AcknowledgementTaskUtil;
 import org.openmrs.module.webservices.rest.web.ConversionUtil;
 import org.openmrs.module.webservices.rest.web.representation.Representation;
 
-
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Slf4j
 public class MedicationAdministrationResponse {
 
     private String uuid;
@@ -49,10 +58,24 @@ public class MedicationAdministrationResponse {
                 providers.add(MedicationAdministrationPerformerResponse.createFrom(performer));
             }
         }
+
+        Map<String, Task> acknowledgementTasksByNoteUuid = new HashMap<>();
+        Set<String> noteUuids = new HashSet<>();
+        if (openmrsMedicationAdministration.getNotes() != null) {
+            for (MedicationAdministrationNote note : openmrsMedicationAdministration.getNotes()) {
+                if (note.getUuid() != null) {
+                    noteUuids.add(note.getUuid());
+                }
+            }
+            if (!noteUuids.isEmpty()) {
+                acknowledgementTasksByNoteUuid = getAcknowledgementTasksForNotes(noteUuids);
+            }
+        }
+
         List<MedicationAdministrationNoteResponse> notes = new java.util.ArrayList<>();
         if (openmrsMedicationAdministration.getNotes() != null) {
             for (MedicationAdministrationNote note : openmrsMedicationAdministration.getNotes()) {
-                notes.add(MedicationAdministrationNoteResponse.createFrom(note));
+                notes.add(MedicationAdministrationNoteResponse.createFrom(note, acknowledgementTasksByNoteUuid));
             }
         }
         return MedicationAdministrationResponse.builder()
@@ -72,6 +95,23 @@ public class MedicationAdministrationResponse {
                 .route(ConversionUtil.convertToRepresentation(openmrsMedicationAdministration.getRoute(), Representation.REF))
                 .site(ConversionUtil.convertToRepresentation(openmrsMedicationAdministration.getSite(), Representation.REF))
                 .build();
+    }
+
+    private static Map<String, Task> getAcknowledgementTasksForNotes(Set<String> noteUuids) {
+        if (noteUuids == null || noteUuids.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        try {
+            TaskService taskService = Context.getService(TaskService.class);
+            if (taskService == null) {
+                return new HashMap<>();
+            }
+            return AcknowledgementTaskUtil.mapCompletedTasksByNoteUuid(taskService, noteUuids);
+        } catch (Exception e) {
+            log.error("Failed to resolve acknowledgement tasks for medication administration notes", e);
+            return new HashMap<>();
+        }
     }
 }
 

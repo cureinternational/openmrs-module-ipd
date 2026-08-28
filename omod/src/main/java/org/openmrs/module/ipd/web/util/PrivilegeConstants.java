@@ -14,4 +14,6 @@ public class PrivilegeConstants {
     public static final String GET_MEDICATION_ADMINISTRATIONS = "Get Medication Administrations";
     @AddOnStartup(description = "Get Medication Tasks description")
     public static final String GET_MEDICATION_TASKS = "Get Medication Tasks";
+    @AddOnStartup(description = "Approve Amend Note description")
+    public static final String APPROVE_AMEND_NOTE = "Approve Amend Note";
 }
