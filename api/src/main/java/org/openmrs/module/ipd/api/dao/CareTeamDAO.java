@@ -13,6 +13,15 @@ public interface CareTeamDAO {
 
     CareTeam getCareTeamByVisit(Visit visit) throws DAOException;
 
+    /**
+     * Get all CareTeam aggregate roots.
+     * Used for operations that need to iterate over all care teams and their participants.
+     *
+     * @return List of all CareTeam objects
+     * @throws DAOException if error occurs
+     */
+    List<CareTeam> getAllCareTeams() throws DAOException;
+
     List<CareTeamParticipant> getActiveParticipants(Date asOf) throws DAOException;
 
     CareTeamParticipant saveParticipant(CareTeamParticipant participant) throws DAOException;
