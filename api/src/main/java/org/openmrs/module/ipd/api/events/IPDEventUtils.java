@@ -12,18 +12,7 @@ import java.util.List;
 public class IPDEventUtils {
 
     public static TaskRequest createNonMedicationTaskRequest(IPDEvent ipdEvent, String name, String taskType, Boolean isSystemGenerated) {
-        List<TaskInputRequestDTO> emptyInput = new ArrayList<>();
-        TaskRequest taskRequest = new TaskRequest();
-        taskRequest.setName(name);
-        taskRequest.setTaskType(taskType);
-        taskRequest.setInput(emptyInput);
-        taskRequest.setEncounterUuid(ipdEvent.getEncounterUuid());
-        taskRequest.setPatientUuid(ipdEvent.getPatientUuid());
-        taskRequest.setRequestedStartTime(new Date());
-        taskRequest.setIntent(FhirTask.TaskIntent.ORDER);
-        taskRequest.setStatus(FhirTask.TaskStatus.REQUESTED);
-        taskRequest.setIsSystemGeneratedTask(isSystemGenerated);
-        return taskRequest;
+        return createNonMedicationTaskRequest(ipdEvent, name, taskType, new ArrayList<>(), isSystemGenerated);
     }
 
     public static TaskRequest createNonMedicationTaskRequest(IPDEvent ipdEvent, String name, String taskType, List<TaskInputRequestDTO> input, Boolean isSystemGenerated) {

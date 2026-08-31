@@ -20,9 +20,8 @@ public class TaskDetail {
 
     @Getter
     @NoArgsConstructor
-    @AllArgsConstructor
     public static class TaskInputDTO {
-        private String type;
+        private String typeUuid;
         private String valueText;
     }
 }

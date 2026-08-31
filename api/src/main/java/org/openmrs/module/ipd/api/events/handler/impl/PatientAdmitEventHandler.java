@@ -43,14 +43,14 @@ public class PatientAdmitEventHandler  implements IPDEventHandler {
 
         if (eventConfig != null) {
             for(TaskDetail taskDetail : eventConfig.getTasks()) {
-                List<TaskInputRequestDTO> taskInputs = taskDetail.getInput().stream()
+                List<TaskInputRequestDTO> taskInputs = taskDetail.getInput() != null ? taskDetail.getInput().stream()
                         .map(input -> {
                             TaskInputRequestDTO dto = new TaskInputRequestDTO();
-                            dto.setType(input.getType());
+                            dto.setTypeUuid(input.getTypeUuid());
                             dto.setValueText(input.getValueText());
                             return dto;
                         })
-                        .collect(Collectors.toList());
+                        .collect(Collectors.toList()) : List.of();
 
                 TaskRequest taskRequest = IPDEventUtils.createNonMedicationTaskRequest(event, taskDetail.getName(), taskDetail.getType(), taskInputs, true);
                 Task task = taskMapper.fromRequest(taskRequest);
