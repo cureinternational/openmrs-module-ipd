@@ -16,6 +16,7 @@ import org.openmrs.module.ipd.api.events.handler.IPDEventHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -50,7 +51,7 @@ public class PatientAdmitEventHandler  implements IPDEventHandler {
                             dto.setValueText(input.getValueText());
                             return dto;
                         })
-                        .collect(Collectors.toList()) : List.of();
+                        .collect(Collectors.toList()) : Collections.emptyList();
 
                 TaskRequest taskRequest = IPDEventUtils.createNonMedicationTaskRequest(event, taskDetail.getName(), taskDetail.getType(), taskInputs, true);
                 Task task = taskMapper.fromRequest(taskRequest);
