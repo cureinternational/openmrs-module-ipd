@@ -48,18 +48,7 @@ public class HibernateWardDAO implements WardDAO {
     public List<AdmittedPatient> getAdmittedPatients(Location location, Provider provider, Date dateTime, String sortBy) {
         Session session = this.sessionFactory.getCurrentSession();
         try {
-            String queryString = "select NEW org.openmrs.module.ipd.api.model.AdmittedPatient(assignment," +
-                    "(COUNT(DISTINCT o.orderId) - COUNT (DISTINCT s.order.orderId)), careTeam)" +
-                    "from org.openmrs.module.bedmanagement.entity.BedPatientAssignment assignment " +
-                    "JOIN org.openmrs.Visit v on v.patient = assignment.patient " +
-                    "JOIN org.openmrs.Encounter e on e.visit = v " +
-                    "LEFT JOIN CareTeam careTeam on careTeam.visit = v " +
-                    "JOIN org.openmrs.module.bedmanagement.entity.BedLocationMapping locmap on locmap.bed = assignment.bed " +
-                    "JOIN org.openmrs.Location l on locmap.location = l " +
-                    "LEFT JOIN careTeam.participants ctp ON ctp.voided = 0 " +
-                    "LEFT JOIN org.openmrs.Order o on o.encounter = e and o.dateStopped is null and o.action!='DISCONTINUE' and o.careSetting.careSettingId = 2 " +
-                    "LEFT JOIN Slot s on s.order = o " +
-                    "where assignment.endDatetime is null and v.stopDatetime is null ";
+            String queryString = getAdmittedPatientsSelectClause();
 
             if(location != null){
                 queryString += "and l.parentLocation = :location ";
@@ -92,6 +81,8 @@ public class HibernateWardDAO implements WardDAO {
             if (dateTime != null) {
                 query.setParameter("dateTime", dateTime);
             }
+
+            query.setParameter("now", new Date());
 
             return query.getResultList();
         }
@@ -149,18 +140,7 @@ public class HibernateWardDAO implements WardDAO {
         try {
             Session session = sessionFactory.getCurrentSession();
 
-            String selectQuery = "select NEW org.openmrs.module.ipd.api.model.AdmittedPatient(assignment, " +
-                    "(COUNT(DISTINCT o.orderId) - COUNT(DISTINCT s.order.orderId)), careTeam) " +
-                    "from org.openmrs.module.bedmanagement.entity.BedPatientAssignment assignment " +
-                    "JOIN org.openmrs.Visit v on v.patient = assignment.patient " +
-                    "JOIN org.openmrs.Patient p on assignment.patient = p " +
-                    "JOIN org.openmrs.Person pr on pr.personId = p.patientId " +
-                    "JOIN org.openmrs.Encounter e on e.visit = v " +
-                    "LEFT JOIN CareTeam careTeam on careTeam.visit = v " +
-                    "JOIN org.openmrs.module.bedmanagement.entity.BedLocationMapping locmap on locmap.bed = assignment.bed " +
-                    "JOIN org.openmrs.Location l on locmap.location = l " +
-                    "LEFT JOIN org.openmrs.Order o on o.encounter = e and o.dateStopped is null and o.action!='DISCONTINUE' and o.careSetting.careSettingId = 2 " +
-                    "LEFT JOIN Slot s on s.order = o ";
+            String selectQuery = getSearchAdmittedPatientsSelectClause();
 
 
             // Construct additional joins and where clause based on search keys
@@ -178,6 +158,7 @@ public class HibernateWardDAO implements WardDAO {
 
             // Set parameters
             query.setParameter("location", location);
+            query.setParameter("now", new Date());
             setQueryParameters(query, searchKeys, searchValue);
 
             return query.getResultList();
@@ -247,6 +228,34 @@ public class HibernateWardDAO implements WardDAO {
         return whereClause.append(" or ");
     }
 
+    static String getAdmittedPatientsSelectClause() {
+        return "select NEW org.openmrs.module.ipd.api.model.AdmittedPatient(assignment," +
+                "(COUNT(DISTINCT o.orderId) - COUNT (DISTINCT s.order.orderId)), careTeam)" +
+                "from org.openmrs.module.bedmanagement.entity.BedPatientAssignment assignment " +
+                "JOIN org.openmrs.Visit v on v.patient = assignment.patient " +
+                "JOIN org.openmrs.Encounter e on e.visit = v " +
+                "LEFT JOIN CareTeam careTeam on careTeam.visit = v " +
+                "JOIN org.openmrs.module.bedmanagement.entity.BedLocationMapping locmap on locmap.bed = assignment.bed " +
+                "JOIN org.openmrs.Location l on locmap.location = l " +
+                "LEFT JOIN careTeam.participants ctp ON ctp.voided = 0 " +
+                "LEFT JOIN org.openmrs.Order o on o.patient = assignment.patient and o.voided = false and o.action!='DISCONTINUE' and ((o.dateStopped is null and (o.autoExpireDate is null or o.autoExpireDate >= :now)) or o.dateStopped >= :now) " +
+                "LEFT JOIN Slot s on s.order = o " +
+                "where assignment.endDatetime is null and v.stopDatetime is null ";
+    }
 
+    static String getSearchAdmittedPatientsSelectClause() {
+        return "select NEW org.openmrs.module.ipd.api.model.AdmittedPatient(assignment, " +
+                "(COUNT(DISTINCT o.orderId) - COUNT(DISTINCT s.order.orderId)), careTeam) " +
+                "from org.openmrs.module.bedmanagement.entity.BedPatientAssignment assignment " +
+                "JOIN org.openmrs.Visit v on v.patient = assignment.patient " +
+                "JOIN org.openmrs.Patient p on assignment.patient = p " +
+                "JOIN org.openmrs.Person pr on pr.personId = p.patientId " +
+                "JOIN org.openmrs.Encounter e on e.visit = v " +
+                "LEFT JOIN CareTeam careTeam on careTeam.visit = v " +
+                "JOIN org.openmrs.module.bedmanagement.entity.BedLocationMapping locmap on locmap.bed = assignment.bed " +
+                "JOIN org.openmrs.Location l on locmap.location = l " +
+                "LEFT JOIN org.openmrs.Order o on o.patient = assignment.patient and o.voided = false and o.action!='DISCONTINUE' and ((o.dateStopped is null and (o.autoExpireDate is null or o.autoExpireDate >= :now)) or o.dateStopped >= :now) " +
+                "LEFT JOIN Slot s on s.order = o ";
+    }
 
 }
