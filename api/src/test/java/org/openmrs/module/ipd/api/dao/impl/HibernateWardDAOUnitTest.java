@@ -10,8 +10,7 @@ public class HibernateWardDAOUnitTest {
     private static final String ACTIVE_ORDER_JOIN =
             "LEFT JOIN org.openmrs.Order o on o.patient = assignment.patient " +
                     "and o.voided = false and o.action!='DISCONTINUE' " +
-                    "and ((o.dateStopped is null and o.autoExpireDate is null) " +
-                    "or (o.dateStopped is null and o.autoExpireDate >= :now) " +
+                    "and ((o.dateStopped is null and (o.autoExpireDate is null or o.autoExpireDate >= :now)) " +
                     "or o.dateStopped >= :now)";
 
     @Test
@@ -54,6 +53,7 @@ public class HibernateWardDAOUnitTest {
         assertTrue(query.contains("o.autoExpireDate is null"));
         assertTrue(query.contains("o.autoExpireDate >= :now"));
         assertTrue(query.contains("o.dateStopped >= :now"));
+        assertTrue(query.contains(ACTIVE_ORDER_JOIN));
     }
 
     @Test
@@ -64,6 +64,7 @@ public class HibernateWardDAOUnitTest {
         assertTrue(query.contains("o.autoExpireDate is null"));
         assertTrue(query.contains("o.autoExpireDate >= :now"));
         assertTrue(query.contains("o.dateStopped >= :now"));
+        assertTrue(query.contains(ACTIVE_ORDER_JOIN));
     }
 
     @Test
