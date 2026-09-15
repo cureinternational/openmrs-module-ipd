@@ -9,8 +9,6 @@ import org.openmrs.module.ipd.api.model.CareTeam;
 import org.openmrs.module.ipd.api.model.CareTeamParticipant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Repository;
 import java.util.Date;
 import java.util.List;
 
@@ -38,6 +36,13 @@ public class HibernateCareTeamDAO implements CareTeamDAO {
         query.setParameter("visit", visit);
 
         return (CareTeam) query.uniqueResult();
+    }
+
+    @Override
+    public List<CareTeam> getAllCareTeams() throws DAOException {
+        Query query = sessionFactory.getCurrentSession()
+                .createQuery("FROM CareTeam careTeam ORDER BY careTeam.uuid");
+        return query.list();
     }
 
     @Override

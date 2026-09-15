@@ -102,4 +102,19 @@ public class CareTeam extends BaseChangeableOpenmrsData {
     public void setEndTime(Date endTime) {
         this.endTime = endTime;
     }
+
+    public Set<CareTeamParticipant> getParticipants() {
+        return participants;
+    }
+
+    public void setParticipants(Set<CareTeamParticipant> participants) {
+        this.participants = participants;
+    }
+
+    public void addParticipant(CareTeamParticipant participant) {
+        if (this.participants == null) {
+            this.participants = new java.util.HashSet<>();
+        }
+        this.participants.add(participant);
+    }
 }
